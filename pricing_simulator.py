@@ -148,7 +148,7 @@ def generate_customer_responses(product_name, product_desc, price, n_customers, 
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=2000
+        max_tokens=3000
     )
     content = response.choices[0].message.content
     return content
