@@ -130,18 +130,19 @@ def generate_customer_responses(product_name, product_desc, price, n_customers, 
     Audience: {audience}.
     {competitors_str}
     Considering typical incomes and consumer attitudes in {city}, {state}, what percentage of customers would buy it at this price?
-    What is the general customer sentiment? 
-    Please also generate around 8 sample customer comments (a mix of feedback, including about the price and suggestions for improvement).
+    What is the general customer sentiment?
+
+    Please generate around 8 sample customer comments. Most comments should include easy, realistic suggestions for improvement that a young student entrepreneur could actually try (like making the product in more colors, making it cheaper, adding a fun feature, or improving packaging). A couple of comments can be positive or encouraging, but do not include advanced or expensive business advice. All suggestions should be friendly and simple enough for a 10-14 year old to understand and possibly do.
+
     Provide your answer as a JSON: {{"buy_percentage": ..., "sentiment": "...", "comments": ["...", "...", "..."]}}
     """
     response = client.chat.completions.create(
-    model="gpt-3.5-turbo",
-    messages=[{"role": "user", "content": prompt}],
-    max_tokens=700
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=700
     )
     content = response.choices[0].message.content
     return content
-
 
 st.markdown("---")
 st.markdown("### 🎲 Run Your Simulation")
