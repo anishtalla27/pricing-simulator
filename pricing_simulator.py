@@ -1,15 +1,14 @@
 import streamlit as st
-import openai
 import plotly.express as px
 import json
 from openai import OpenAI
-
 
 # Use Streamlit secrets for the API key
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 st.set_page_config(page_title="Pricing Simulator", page_icon=":rocket:", layout="centered")
 
+# ---- Background Gradient ----
 st.markdown(
     """
     <style>
@@ -22,42 +21,38 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
-# HEADER with fun emoji and high-tech feel
+# ---- Header ----
 st.markdown(
     """
     <div style='text-align: center; font-size: 38px; font-weight: bold; color: #13c0ff;'>
         🚀 <span style='color:#13c0ff;'>Pricing Simulator Lab</span> 🛒
-    </div>
-    <div style='text-align: center; font-size: 18px; color: #444;'>  
     </div>
     """,
     unsafe_allow_html=True,
 )
 st.markdown("---")
 
-# PRODUCT DETAILS SECTION
+# ---- Product Details ----
 st.subheader("📝 Product Details")
 product_name = st.text_input("What will you call your product?", placeholder="EcoGlow Water Bottle")
 product_desc = st.text_area("Describe your product!", placeholder="A reusable water bottle that glows in the dark and keeps drinks cold.")
 audience = st.text_input("Who is this product for?", placeholder="e.g., kids, teens, parents")
 
-st.markdown("")
-
-# LOCATION
+# ---- Location ----
 st.subheader("📍 Customer Location")
 city = st.text_input("City", placeholder="e.g., Dallas")
 state = st.text_input("State", placeholder="e.g., Texas")
 
 st.markdown("---")
 
+# ---- Pricing Method ----
 pricing_method = st.selectbox(
     "💸 Which Pricing Method Do You Want to Use?",
     ("Cost-Plus", "Market-Based"),
     help="Cost-Plus: Set your price based on your costs. Market-Based: Set your price based on the competition."
 )
 
-# --- DYNAMIC COMPETITOR INPUTS ---
+# ---- Dynamic Competitor Inputs ----
 if "competitors" not in st.session_state:
     st.session_state.competitors = []
 
@@ -134,16 +129,19 @@ def generate_customer_responses(product_name, product_desc, price, n_customers, 
 
     Please generate around 8 sample customer comments. Most comments should include easy, realistic suggestions for improvement that a young student entrepreneur could actually try (like making the product in more colors, making it cheaper, adding a fun feature, or improving packaging). A couple of comments can be positive or encouraging, but do not include advanced or expensive business advice. All suggestions should be friendly and simple enough for a 10-14 year old to understand and possibly do.
 
-    Provide your answer as a JSON: {{"buy_percentage": ..., "sentiment": "...", "comments": ["...", "...", "..."]}}
+    Additionally, analyze all simulated customer responses and identify the top 3 best aspects (reasons people liked the product the most, such as price, durability, design, size, or others—these should be specific to the product and include price if it's a positive). For each, estimate what percentage of customers picked each reason. Also, identify the top 3 worst aspects (reasons people disliked the product the most, such as price, durability, size, etc.) with estimated percentages. Include an "Other" category if needed. Return this as two tables: one for best aspects and one for worst aspects.
+
+    Provide your answer as a JSON: {{"buy_percentage": ..., "sentiment": "...", "comments": ["...", "...", "..."], "best_aspects": {{"aspect1": ..., "percentage1": ..., "aspect2": ..., "percentage2": ..., "aspect3": ..., "percentage3": ..., "other": ...}}, "worst_aspects": {{"aspect1": ..., "percentage1": ..., "aspect2": ..., "percentage2": ..., "aspect3": ..., "percentage3": ..., "other": ...}}}}
     """
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=700
+        max_tokens=900
     )
     content = response.choices[0].message.content
     return content
 
+# ---- Simulation and Output ----
 st.markdown("---")
 st.markdown("### 🎲 Run Your Simulation")
 if st.button("🧪 Simulate Customer Responses"):
@@ -161,7 +159,10 @@ if st.button("🧪 Simulate Customer Responses"):
             buy_percentage = ai_json.get("buy_percentage", 0)
             sentiment = ai_json.get("sentiment", "")
             comments = ai_json.get("comments", [])
+            best_aspects = ai_json.get("best_aspects", {})
+            worst_aspects = ai_json.get("worst_aspects", {})
 
+            # Results summary
             st.markdown("## 📊 Customer Purchase Results")
             col1, col2 = st.columns(2)
             col1.metric("Buy Percentage", f"{buy_percentage}%")
@@ -177,6 +178,7 @@ if st.button("🧪 Simulate Customer Responses"):
             )
             st.plotly_chart(fig)
 
+            # Market Competitors Table
             if pricing_method == "Market-Based" and st.session_state.competitors:
                 st.subheader("🏢 Market Competitors")
                 comp_table = [
@@ -190,6 +192,33 @@ if st.button("🧪 Simulate Customer Responses"):
                 if comp_table:
                     st.table(comp_table)
 
+            # Best Aspects Table
+            st.markdown("### 🏅 Best Aspects of Your Product")
+            if best_aspects:
+                best_table = [
+                    {"Aspect": best_aspects.get("aspect1", "N/A"), "Percent (%)": best_aspects.get("percentage1", "N/A")},
+                    {"Aspect": best_aspects.get("aspect2", "N/A"), "Percent (%)": best_aspects.get("percentage2", "N/A")},
+                    {"Aspect": best_aspects.get("aspect3", "N/A"), "Percent (%)": best_aspects.get("percentage3", "N/A")},
+                    {"Aspect": "Other", "Percent (%)": best_aspects.get("other", "N/A")},
+                ]
+                st.table(best_table)
+            else:
+                st.write("No best aspects data available.")
+
+            # Worst Aspects Table
+            st.markdown("### 🚧 Worst Aspects of Your Product")
+            if worst_aspects:
+                worst_table = [
+                    {"Aspect": worst_aspects.get("aspect1", "N/A"), "Percent (%)": worst_aspects.get("percentage1", "N/A")},
+                    {"Aspect": worst_aspects.get("aspect2", "N/A"), "Percent (%)": worst_aspects.get("percentage2", "N/A")},
+                    {"Aspect": worst_aspects.get("aspect3", "N/A"), "Percent (%)": worst_aspects.get("percentage3", "N/A")},
+                    {"Aspect": "Other", "Percent (%)": worst_aspects.get("other", "N/A")},
+                ]
+                st.table(worst_table)
+            else:
+                st.write("No worst aspects data available.")
+
+            # Customer Comments
             st.markdown("### 💬 Sample Customer Comments")
             if comments:
                 for i, comment in enumerate(comments):
