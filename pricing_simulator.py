@@ -1,5 +1,6 @@
 import streamlit as st
 import plotly.express as px
+import pandas as pd
 import json
 from openai import OpenAI
 
@@ -102,6 +103,17 @@ elif pricing_method == "Market-Based":
 
 n_customers = st.slider("How many customer responses do you want to simulate?", min_value=100, max_value=5000, value=1000, step=100, help="More customers = more data!")
 
+def comment_count_from_n(n_customers):
+    if n_customers <= 100:
+        return 8
+    elif n_customers <= 1000:
+        return 10
+    elif n_customers <= 2500:
+        return 12
+    else:
+        return 15
+
+
 def build_competitor_prompt(competitors):
     if not competitors or all(c["price"] == 0.0 for c in competitors):
         return "There are no clear competitors in the market."
@@ -118,25 +130,25 @@ def build_competitor_prompt(competitors):
         return "There are no clear competitors in the market."
     return "Here are the main competitors in the market:\n" + "\n".join(lines)
 
-def generate_customer_responses(product_name, product_desc, price, n_customers, pricing_method, city, state, competitors_str):
+def generate_customer_responses(product_name, product_desc, price, n_customers, pricing_method, city, state, competitors_str, n_comments):
     prompt = f"""
-    Imagine {n_customers} potential customers from {city}, {state} for a product called "{product_name}" ({product_desc}).
+    Imagine {n_customers} potential customers from {city}, {state} for a product called \"{product_name}\" ({product_desc}).
     The product is being sold at ${price:.2f} using the {pricing_method} pricing method.
     Audience: {audience}.
     {competitors_str}
     Considering typical incomes and consumer attitudes in {city}, {state}, what percentage of customers would buy it at this price?
     What is the general customer sentiment?
 
-    Please generate around 8 sample customer comments. Most comments should include easy, realistic suggestions for improvement that a young student entrepreneur could actually try (like making the product in more colors, making it cheaper, adding a fun feature, or improving packaging). A couple of comments can be positive or encouraging, but do not include advanced or expensive business advice. All suggestions should be friendly and simple enough for a 10-14 year old to understand and possibly do.
+    Please generate around {n_comments} sample customer comments. Most comments should include easy, realistic suggestions for improvement that a young student entrepreneur could actually try (like making the product in more colors, making it cheaper, adding a fun feature, or improving packaging). A couple of comments can be positive or encouraging, but do not include advanced or expensive business advice. All suggestions should be friendly and simple enough for a 10-14 year old to understand and possibly do.
 
-    Additionally, analyze all simulated customer responses and identify the top 3 best aspects (reasons people liked the product the most, such as price, durability, design, size, or others—these should be specific to the product and include price if it's a positive). For each, estimate what percentage of customers picked each reason. Also, identify the top 3 worst aspects (reasons people disliked the product the most, such as price, durability, size, etc.) with estimated percentages. Include an "Other" category if needed. Return this as two tables: one for best aspects and one for worst aspects.
+    Additionally, analyze all simulated customer responses and identify the top 3 best aspects (reasons people liked the product the most, such as price, durability, design, size, or others—these should be specific to the product and include price if it's a positive). For each, estimate what percentage of customers picked each reason. Also, identify the top 3 worst aspects (reasons people disliked the product the most, such as price, durability, size, etc.) with estimated percentages. Include an \"Other\" category if needed. Return this as two tables: one for best aspects and one for worst aspects.
 
     Provide your answer as a JSON: {{"buy_percentage": ..., "sentiment": "...", "comments": ["...", "...", "..."], "best_aspects": {{"aspect1": ..., "percentage1": ..., "aspect2": ..., "percentage2": ..., "aspect3": ..., "percentage3": ..., "other": ...}}, "worst_aspects": {{"aspect1": ..., "percentage1": ..., "aspect2": ..., "percentage2": ..., "aspect3": ..., "percentage3": ..., "other": ...}}}}
     """
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=900
+        max_tokens=1200
     )
     content = response.choices[0].message.content
     return content
@@ -150,8 +162,9 @@ if st.button("🧪 Simulate Customer Responses"):
     else:
         st.info("Simulating responses with AI. Please wait... 🤖")
         competitors_str = build_competitor_prompt(st.session_state.competitors) if pricing_method == "Market-Based" else ""
+        n_comments = comment_count_from_n(n_customers)
         ai_result = generate_customer_responses(
-            product_name, product_desc, price, n_customers, pricing_method, city, state, competitors_str
+            product_name, product_desc, price, n_customers, pricing_method, city, state, competitors_str, n_comments
         )
         try:
             ai_result_clean = ai_result.strip().strip("```json").strip("```").strip()
@@ -190,31 +203,33 @@ if st.button("🧪 Simulate Customer Responses"):
                     for c in st.session_state.competitors if c["price"]
                 ]
                 if comp_table:
-                    st.table(comp_table)
+                    st.dataframe(pd.DataFrame(comp_table), use_container_width=True, hide_index=True)
 
             # Best Aspects Table
             st.markdown("### 🏅 Best Aspects of Your Product")
             if best_aspects:
-                best_table = [
+                best_table = pd.DataFrame([
                     {"Aspect": best_aspects.get("aspect1", "N/A"), "Percent (%)": best_aspects.get("percentage1", "N/A")},
                     {"Aspect": best_aspects.get("aspect2", "N/A"), "Percent (%)": best_aspects.get("percentage2", "N/A")},
                     {"Aspect": best_aspects.get("aspect3", "N/A"), "Percent (%)": best_aspects.get("percentage3", "N/A")},
                     {"Aspect": "Other", "Percent (%)": best_aspects.get("other", "N/A")},
-                ]
-                st.table(best_table)
+                ])
+                st.dataframe(best_table, use_container_width=True, hide_index=True)
+                st.caption("Percent (%) shows the percentage of customers who chose each as the best thing about your product.")
             else:
                 st.write("No best aspects data available.")
 
             # Worst Aspects Table
             st.markdown("### 🚧 Worst Aspects of Your Product")
             if worst_aspects:
-                worst_table = [
+                worst_table = pd.DataFrame([
                     {"Aspect": worst_aspects.get("aspect1", "N/A"), "Percent (%)": worst_aspects.get("percentage1", "N/A")},
                     {"Aspect": worst_aspects.get("aspect2", "N/A"), "Percent (%)": worst_aspects.get("percentage2", "N/A")},
                     {"Aspect": worst_aspects.get("aspect3", "N/A"), "Percent (%)": worst_aspects.get("percentage3", "N/A")},
                     {"Aspect": "Other", "Percent (%)": worst_aspects.get("other", "N/A")},
-                ]
-                st.table(worst_table)
+                ])
+                st.dataframe(worst_table, use_container_width=True, hide_index=True)
+                st.caption("Percent (%) shows the percentage of customers who picked each as the biggest thing to improve.")
             else:
                 st.write("No worst aspects data available.")
 
@@ -232,4 +247,3 @@ if st.button("🧪 Simulate Customer Responses"):
 
 st.markdown("---")
 st.caption("Made with Streamlit & OpenAI | For learning and fun! ✨")
-
