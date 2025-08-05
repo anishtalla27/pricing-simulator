@@ -2,9 +2,11 @@ import streamlit as st
 import openai
 import plotly.express as px
 import json
+from openai import OpenAI
+
 
 # Use Streamlit secrets for the API key
-openai.api_key = st.secrets["openai"]["api_key"]
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 st.set_page_config(page_title="Pricing Simulator", page_icon=":rocket:", layout="centered")
 
@@ -132,13 +134,14 @@ def generate_customer_responses(product_name, product_desc, price, n_customers, 
     Please also generate around 8 sample customer comments (a mix of feedback, including about the price and suggestions for improvement).
     Provide your answer as a JSON: {{"buy_percentage": ..., "sentiment": "...", "comments": ["...", "...", "..."]}}
     """
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=700
+    response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": prompt}],
+    max_tokens=700
     )
-    content = response.choices[0].message['content']
+    content = response.choices[0].message.content
     return content
+
 
 st.markdown("---")
 st.markdown("### 🎲 Run Your Simulation")
