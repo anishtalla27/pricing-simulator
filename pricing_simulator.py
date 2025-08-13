@@ -2,248 +2,324 @@ import streamlit as st
 import plotly.express as px
 import pandas as pd
 import json
+from datetime import date
 from openai import OpenAI
 
-# Use Streamlit secrets for the API key
-client = OpenAI(api_key=st.secrets["openai"]["api_key"])
+# =====================
+# Setup
+# =====================
+st.set_page_config(page_title="Cost-Plus Pricing Lab", page_icon=":rocket:", layout="centered")
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])  # Keep API key in Streamlit secrets
 
-st.set_page_config(page_title="Pricing Simulator", page_icon=":rocket:", layout="centered")
-
-# ---- Background Gradient ----
+# Background style
 st.markdown(
     """
     <style>
-    .stApp {
-        background: radial-gradient(circle at center, #175e88 0%, #276da0 60%, #eaf6fb 100%);
-        min-height: 100vh;
-    }
+      .stApp { background: radial-gradient(circle at 50% 40%, #144e72 0%, #1e5f8d 55%, #e7f6ff 100%); min-height: 100vh; }
+      .small-note { color:#245a75; font-size:0.9rem; }
+      .edu { background:#f0fbff; border-left:5px solid #19a7ff; padding:0.6rem 0.8rem; border-radius:6px; }
     </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# ---- Header ----
-st.markdown(
-    """
-    <div style='text-align: center; font-size: 38px; font-weight: bold; color: #13c0ff;'>
-        🚀 <span style='color:#13c0ff;'>Pricing Simulator Lab</span> 🛒
-    </div>
     """,
     unsafe_allow_html=True,
 )
+
+st.markdown("""
+<div style='text-align:center; font-size:38px; font-weight:800; color:#13c0ff;'>
+  🚀 Cost-Plus Pricing Lab for Young Entrepreneurs
+</div>
+<div style='text-align:center; color:#0f2f44;'>Figure out a fair price, learn how costs work, and get friendly AI tips.</div>
+""", unsafe_allow_html=True)
 st.markdown("---")
 
-# ---- Product Details ----
-st.subheader("📝 Product Details")
-product_name = st.text_input("What will you call your product?", placeholder="EcoGlow Water Bottle")
-product_desc = st.text_area("Describe your product!", placeholder="A reusable water bottle that glows in the dark and keeps drinks cold.")
-audience = st.text_input("Who is this product for?", placeholder="e.g., kids, teens, parents")
+# =====================
+# Save / Load product profiles
+# =====================
+if "profiles" not in st.session_state:
+    st.session_state.profiles = {}
 
-# ---- Location ----
-st.subheader("📍 Customer Location")
-city = st.text_input("City", placeholder="e.g., Dallas")
-state = st.text_input("State", placeholder="e.g., Texas")
+cols = st.columns([2,2,1])
+with cols[0]:
+    profile_name = st.text_input("Save as profile name", placeholder="My Slime Kit v1")
+with cols[1]:
+    selected_profile = st.selectbox("Load profile", [""] + list(st.session_state.profiles.keys()))
+with cols[2]:
+    if st.button("💾 Save") and profile_name.strip():
+        st.session_state.profiles[profile_name.strip()] = st.session_state.get("_current_profile", {})
+        st.success(f"Saved profile '{profile_name.strip()}'")
 
+if selected_profile:
+    loaded = st.session_state.profiles.get(selected_profile, {})
+    if loaded:
+        st.session_state.update(loaded)
+        st.info(f"Loaded profile '{selected_profile}'")
+
+# =====================
+# Product Basics
+# =====================
+st.subheader("📝 Product Basics")
+colA, colB = st.columns(2)
+with colA:
+    product_name = st.text_input("Product name", value=st.session_state.get("product_name", ""), help="What are you selling?")
+with colB:
+    time_minutes = st.number_input("Time to make one product (minutes)", min_value=0, value=st.session_state.get("time_minutes", 15), help="How long it takes you to make one item.")
+product_desc = st.text_area("Short description", value=st.session_state.get("product_desc", ""), placeholder="A handmade bracelet with cute charms.")
+
+st.markdown("<div class='edu'>Tip: Time is money. Your time counts as a cost called 'labor'.</div>", unsafe_allow_html=True)
+
+# =====================
+# Materials
+# =====================
+st.subheader("🧱 Materials (per product)")
+colM1, colM2 = st.columns(2)
+with colM1:
+    materials_cost = st.number_input("Raw materials ($)", min_value=0.0, value=st.session_state.get("materials_cost", 2.00), help="Beads, wood, flour, etc.")
+with colM2:
+    packaging_cost = st.number_input("Packaging ($)", min_value=0.0, value=st.session_state.get("packaging_cost", 0.50), help="Bags, boxes, labels.")
+
+# =====================
+# One-Time Equipment (CRITICAL)
+# =====================
+st.subheader("🛠️ One-Time Equipment")
+colE1, colE2 = st.columns(2)
+with colE1:
+    equip_name = st.text_input("Equipment name", value=st.session_state.get("equip_name", "Glue gun"), help="Tool or machine you bought once.")
+    equip_cost = st.number_input("Equipment total cost ($)", min_value=0.0, value=st.session_state.get("equip_cost", 25.0))
+with colE2:
+    equip_units = st.number_input("How many products can this make?", min_value=1, value=st.session_state.get("equip_units", 200), help="Best guess over the life of the equipment.")
+    equip_date = st.date_input("Purchase date", value=st.session_state.get("equip_date", date.today()))
+
+# Equipment cost per unit (amortized)
+if equip_units > 0:
+    equip_per_unit = equip_cost / equip_units
+else:
+    equip_per_unit = 0.0
+
+# =====================
+# Production Costs (CRITICAL)
+# =====================
+st.subheader("🏭 Production Costs")
+colP1, colP2 = st.columns(2)
+with colP1:
+    hourly_wage = st.number_input("Your desired hourly wage ($/hour)", min_value=0.0, value=st.session_state.get("hourly_wage", 12.0), help="Pay yourself fairly for your time.")
+    other_prod_cost = st.number_input("Other production cost per product ($)", min_value=0.0, value=st.session_state.get("other_prod_cost", 0.20), help="Electricity, water, etc.")
+with colP2:
+    shipping_cost = st.number_input("Shipping / delivery per product ($)", min_value=0.0, value=st.session_state.get("shipping_cost", 3.50))
+    platform_fee_pct = st.slider("Platform fee (% of price)", min_value=0, max_value=30, value=st.session_state.get("platform_fee_pct", 5), help="Fees from Etsy, eBay, etc.")
+    platform_fee_fixed = st.number_input("Platform fixed fee per sale ($)", min_value=0.0, value=st.session_state.get("platform_fee_fixed", 0.30))
+
+# Labor cost per unit
+labor_cost = (time_minutes / 60.0) * hourly_wage
+
+# =====================
+# Monthly Business Costs
+# =====================
+st.subheader("📅 Monthly Business Costs")
+colB1, colB2 = st.columns(2)
+with colB1:
+    monthly_expenses = st.number_input("Total monthly business expenses ($)", min_value=0.0, value=st.session_state.get("monthly_expenses", 30.0), help="Ads, extra supplies, website, etc.")
+with colB2:
+    avg_units_per_month = st.number_input("Average products sold per month", min_value=1, value=st.session_state.get("avg_units_per_month", 20))
+
+monthly_overhead_per_unit = monthly_expenses / avg_units_per_month if avg_units_per_month > 0 else 0.0
+
+# =====================
+# Additional Notes
+# =====================
+notes = st.text_area("Additional notes (optional)", value=st.session_state.get("notes", ""), help="Any special costs or things to remember.")
+
+# =====================
+# Cost-plus Calculation
+# =====================
 st.markdown("---")
+st.subheader("🧮 Cost-Plus Calculator")
+margin_pct = st.slider("Choose your profit margin (%)", 10, 100, value=40, help="Higher margin means more profit per sale, but price goes up.")
 
-# ---- Pricing Method ----
-pricing_method = st.selectbox(
-    "💸 Which Pricing Method Do You Want to Use?",
-    ("Cost-Plus", "Market-Based"),
-    help="Cost-Plus: Set your price based on your costs. Market-Based: Set your price based on the competition."
+# Variable costs per unit (costs that happen every sale)
+variable_costs = (
+    materials_cost + packaging_cost + equip_per_unit + labor_cost + other_prod_cost + shipping_cost
 )
 
-# ---- Dynamic Competitor Inputs ----
-if "competitors" not in st.session_state:
-    st.session_state.competitors = []
+# Price-dependent fees
+# We will compute after we get pre-fee price guess. Start with base price guess:
+base_price_no_fees = variable_costs + monthly_overhead_per_unit
+prelim_price = base_price_no_fees * (1 + margin_pct/100)
+platform_fees_per_unit = (platform_fee_pct/100.0) * prelim_price + platform_fee_fixed
 
-def add_competitor():
-    st.session_state.competitors.append({"name": "", "price": 0.0, "details": ""})
+true_unit_cost = variable_costs + monthly_overhead_per_unit + platform_fees_per_unit
+suggested_price = true_unit_cost * (1 + margin_pct/100)
+profit_per_unit = suggested_price - true_unit_cost
 
-def clear_competitors():
-    st.session_state.competitors = []
+# Break-even units per month (to cover monthly expenses only)
+contribution_per_unit = suggested_price - (variable_costs + platform_fees_per_unit)
+breakeven_units = int(monthly_expenses / contribution_per_unit) + (1 if monthly_expenses % max(contribution_per_unit, 1e-9) != 0 else 0) if contribution_per_unit > 0 else None
 
-if pricing_method == "Cost-Plus":
-    st.subheader("🔧 Cost-Plus Pricing Setup")
-    with st.expander("What is Cost-Plus Pricing?"):
-        st.info("Add up all the costs it takes to make your product (like materials, packaging, and marketing), then add a little extra on top for profit. This way, you know you’re covering your expenses and making money!")
-    prod_cost = st.number_input("Production Cost per Unit ($)", min_value=0.0, value=1.0)
-    marketing_cost = st.number_input("Marketing Cost per Unit ($)", min_value=0.0, value=0.5)
-    packaging_cost = st.number_input("Packaging Cost per Unit ($)", min_value=0.0, value=0.3)
-    transport_cost = st.number_input("Transport Cost per Unit ($)", min_value=0.0, value=0.2)
-    other_cost = st.number_input("Other Costs per Unit ($)", min_value=0.0, value=0.0)
-    margin = st.slider("Profit Margin (%)", min_value=5, max_value=100, value=40)
-    total_cost = prod_cost + marketing_cost + packaging_cost + transport_cost + other_cost
-    price = total_cost * (1 + margin/100)
-    st.success(f"💡 Suggested Price: **${price:.2f}**")
-elif pricing_method == "Market-Based":
-    st.subheader("🏆 Market-Based Pricing Setup")
-    with st.expander("What is Market-Based Pricing?"):
-        st.info("Set your price by looking at what other, similar products are selling for. You check out your competition and choose a price that helps you stand out or fit in with the market.")
-    st.markdown("#### 🏢 Add Your Competitors")
-    col_add, col_clear = st.columns([2, 1])
-    with col_add:
-        if st.button("➕ Add Competitor"):
-            add_competitor()
-    with col_clear:
-        if st.button("🗑️ Clear All"):
-            clear_competitors()
-    for idx, competitor in enumerate(st.session_state.competitors):
-        st.markdown(f"<b>Competitor #{idx+1}</b>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([2,1,3])
-        with c1:
-            name = st.text_input("Name (optional)", competitor.get("name", ""), key=f"name_{idx}")
-        with c2:
-            price_val = st.number_input("Price", value=competitor.get("price", 0.0), key=f"price_{idx}")
-        with c3:
-            details = st.text_input("Product Details (optional)", competitor.get("details", ""), key=f"details_{idx}")
-        st.session_state.competitors[idx] = {"name": name, "price": price_val, "details": details}
-    your_price = st.number_input("Your Product Price ($)", min_value=0.0, value=1.0)
-    price = your_price
+# =====================
+# Show Results
+# =====================
+st.success("Great job. Your pricing calculation is ready!")
+st.balloons()
 
-n_customers = st.slider("How many customer responses do you want to simulate?", min_value=100, max_value=5000, value=1000, step=100, help="More customers = more data!")
+colR1, colR2 = st.columns(2)
+with colR1:
+    st.metric("Suggested Price", f"${suggested_price:.2f}")
+    st.metric("Profit per Unit", f"${profit_per_unit:.2f}")
+with colR2:
+    st.metric("Your Margin", f"{margin_pct}%")
+    if breakeven_units is not None and breakeven_units > 0:
+        st.metric("Break-even units / month", f"{breakeven_units}")
+    else:
+        st.metric("Break-even units / month", "N/A")
 
-def comment_count_from_n(n_customers):
-    if n_customers <= 100:
+# Cost breakdown table
+breakdown = pd.DataFrame([
+    {"Cost Type":"Materials", "$/unit": round(materials_cost,2)},
+    {"Cost Type":"Packaging", "$/unit": round(packaging_cost,2)},
+    {"Cost Type":"Equipment (spread)", "$/unit": round(equip_per_unit,2)},
+    {"Cost Type":"Labor", "$/unit": round(labor_cost,2)},
+    {"Cost Type":"Other Production", "$/unit": round(other_prod_cost,2)},
+    {"Cost Type":"Shipping/Delivery", "$/unit": round(shipping_cost,2)},
+    {"Cost Type":"Platform Fees", "$/unit": round(platform_fees_per_unit,2)},
+    {"Cost Type":"Monthly Overhead", "$/unit": round(monthly_overhead_per_unit,2)},
+], columns=["Cost Type","$/unit"]) 
+
+st.markdown("### 📦 Where does the money go?")
+st.dataframe(breakdown, use_container_width=True, hide_index=True)
+
+fig = px.pie(breakdown, names="Cost Type", values="$/unit", title="Cost Breakdown per Unit")
+st.plotly_chart(fig, use_container_width=True)
+
+# =====================
+# AI Feedback (competitiveness + advice)
+# =====================
+st.markdown("---")
+st.subheader("🤖 AI Feedback on Your Price")
+
+n_customers = st.slider("How many customer opinions to simulate?", 100, 5000, 1000, step=100)
+
+# Choose number of comments based on n_customers
+def comment_count(n):
+    if n <= 100:
         return 8
-    elif n_customers <= 1000:
+    elif n <= 1000:
         return 10
-    elif n_customers <= 2500:
+    elif n <= 2500:
         return 12
     else:
         return 15
 
+n_comments = comment_count(n_customers)
 
-def build_competitor_prompt(competitors):
-    if not competitors or all(c["price"] == 0.0 for c in competitors):
-        return "There are no clear competitors in the market."
-    lines = []
-    for c in competitors:
-        if c["price"] and c["price"] > 0:
-            desc = f'Price: ${c["price"]:.2f}'
-            if c["name"]:
-                desc = f'Name: {c["name"]}, {desc}'
-            if c["details"]:
-                desc = f'{desc}, Details: {c["details"]}'
-            lines.append(desc)
-    if not lines:
-        return "There are no clear competitors in the market."
-    return "Here are the main competitors in the market:\n" + "\n".join(lines)
-
-def generate_customer_responses(product_name, product_desc, price, n_customers, pricing_method, city, state, competitors_str, n_comments):
+if st.button("Generate AI Feedback"):
     prompt = f"""
-    Imagine {n_customers} potential customers from {city}, {state} for a product called \"{product_name}\" ({product_desc}).
-    The product is being sold at ${price:.2f} using the {pricing_method} pricing method.
-    Audience: {audience}.
-    {competitors_str}
-    Considering typical incomes and consumer attitudes in {city}, {state}, what percentage of customers would buy it at this price?
-    What is the general customer sentiment?
+    You are helping a 10-17 year old entrepreneur think about pricing.
+    Product: {product_name}
+    Description: {product_desc}
+    Time per unit (minutes): {time_minutes}
+    Calculated suggested price: ${suggested_price:.2f}
+    Profit per unit at this price: ${profit_per_unit:.2f}
+    Margin percent: {margin_pct}%
 
-    Please generate around {n_comments} sample customer comments. Most comments should include easy, realistic suggestions for improvement that a young student entrepreneur could actually try (like making the product in more colors, making it cheaper, adding a fun feature, or improving packaging). A couple of comments can be positive or encouraging, but do not include advanced or expensive business advice. All suggestions should be friendly and simple enough for a 10-14 year old to understand and possibly do.
+    Unit cost breakdown (all values are $/unit):
+    - Materials: {materials_cost:.2f}
+    - Packaging: {packaging_cost:.2f}
+    - Equipment (spread over {equip_units} units): {equip_per_unit:.2f}
+    - Labor: {labor_cost:.2f}
+    - Other production: {other_prod_cost:.2f}
+    - Shipping: {shipping_cost:.2f}
+    - Platform fees: {platform_fees_per_unit:.2f}
+    - Monthly overhead per unit: {monthly_overhead_per_unit:.2f}
 
-    Additionally, analyze all simulated customer responses and identify the top 3 best aspects (reasons people liked the product the most, such as price, durability, design, size, or others—these should be specific to the product and include price if it's a positive). For each, estimate what percentage of customers picked each reason. Also, identify the top 3 worst aspects (reasons people disliked the product the most, such as price, durability, size, etc.) with estimated percentages. Include an \"Other\" category if needed. Return this as two tables: one for best aspects and one for worst aspects.
+    Task 1: In one short paragraph, say whether this price looks competitive in a simple, friendly way.
+    Task 2: Give {n_comments} short customer-style comments (kid-friendly) with mostly helpful improvement ideas they can actually do. Include a couple encouraging messages.
+    Task 3: List the top 2 BEST aspects and top 2 WORST aspects with an estimated percentage of customers who chose each. Also include an 'Other' catch-all percent for each list. All percentages must be integers 0-100 and each list should sum to 100.
 
-    Provide your answer as a JSON: {{"buy_percentage": ..., "sentiment": "...", "comments": ["...", "...", "..."], "best_aspects": {{"aspect1": ..., "percentage1": ..., "aspect2": ..., "percentage2": ..., "aspect3": ..., "percentage3": ..., "other": ...}}, "worst_aspects": {{"aspect1": ..., "percentage1": ..., "aspect2": ..., "percentage2": ..., "aspect3": ..., "percentage3": ..., "other": ...}}}}
+    Return valid JSON only with this schema:
+    {{
+      "competitive_summary": "...",
+      "comments": ["..."],
+      "best_aspects": {{"aspect1": "...", "percentage1": 60, "aspect2": "...", "percentage2": 30, "other": 10}},
+      "worst_aspects": {{"aspect1": "...", "percentage1": 50, "aspect2": "...", "percentage2": 35, "other": 15}}
+    }}
     """
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=3000
-    )
-    content = response.choices[0].message.content
-    return content
-
-# ---- Simulation and Output ----
-st.markdown("---")
-st.markdown("### 🎲 Run Your Simulation")
-if st.button("🧪 Simulate Customer Responses"):
-    if not product_name or not price or not city or not state:
-        st.warning("⚠️ Please enter product name, price, city, and state.")
-    else:
-        st.info("Simulating responses with AI. Please wait... 🤖")
-        competitors_str = build_competitor_prompt(st.session_state.competitors) if pricing_method == "Market-Based" else ""
-        n_comments = comment_count_from_n(n_customers)
-        ai_result = generate_customer_responses(
-            product_name, product_desc, price, n_customers, pricing_method, city, state, competitors_str, n_comments
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role":"user","content": prompt}],
+            max_tokens=1400
         )
-        try:
-            ai_result_clean = ai_result.strip().strip("```json").strip("```").strip()
-            ai_json = json.loads(ai_result_clean)
-            buy_percentage = ai_json.get("buy_percentage", 0)
-            sentiment = ai_json.get("sentiment", "")
-            comments = ai_json.get("comments", [])
-            best_aspects = ai_json.get("best_aspects", {})
-            worst_aspects = ai_json.get("worst_aspects", {})
+        raw = resp.choices[0].message.content.strip().strip("```json").strip("```").strip()
+        data = json.loads(raw)
 
-            # Results summary
-            st.markdown("## 📊 Customer Purchase Results")
-            col1, col2 = st.columns(2)
-            col1.metric("Buy Percentage", f"{buy_percentage}%")
-            col2.metric("Est. Buyers", f"{int(buy_percentage * n_customers / 100)} / {n_customers}")
+        st.markdown("### 📣 Competitive Summary")
+        st.info(data.get("competitive_summary", ""))
 
-            st.success(f"**General Sentiment:** {sentiment}")
+        # Best/Worst aspects tables (2 aspects + Other)
+        best = data.get("best_aspects", {})
+        worst = data.get("worst_aspects", {})
 
-            fig = px.pie(
-                names=["Willing to Buy", "Not Willing to Buy"],
-                values=[buy_percentage, 100 - buy_percentage],
-                color_discrete_sequence=["#13c0ff", "#ffd700"],
-                title="Customer Willingness to Buy"
-            )
-            st.plotly_chart(fig)
+        best_table = pd.DataFrame([
+            {"Aspect": best.get("aspect1", "N/A"), "Percent of customers (%)": best.get("percentage1", "N/A")},
+            {"Aspect": best.get("aspect2", "N/A"), "Percent of customers (%)": best.get("percentage2", "N/A")},
+            {"Aspect": "Other", "Percent of customers (%)": best.get("other", "N/A")},
+        ])
+        best_table["Percent of customers (%)"] = best_table["Percent of customers (%)"].astype(str)
 
-            # Market Competitors Table
-            if pricing_method == "Market-Based" and st.session_state.competitors:
-                st.subheader("🏢 Market Competitors")
-                comp_table = [
-                    {
-                        "Name": c["name"] if c["name"] else "(N/A)",
-                        "Price": c["price"] if c["price"] else "(N/A)",
-                        "Details": c["details"] if c["details"] else "(N/A)"
-                    }
-                    for c in st.session_state.competitors if c["price"]
-                ]
-                if comp_table:
-                    st.dataframe(pd.DataFrame(comp_table), use_container_width=True, hide_index=True)
+        worst_table = pd.DataFrame([
+            {"Aspect": worst.get("aspect1", "N/A"), "Percent of customers (%)": worst.get("percentage1", "N/A")},
+            {"Aspect": worst.get("aspect2", "N/A"), "Percent of customers (%)": worst.get("percentage2", "N/A")},
+            {"Aspect": "Other", "Percent of customers (%)": worst.get("other", "N/A")},
+        ])
+        worst_table["Percent of customers (%)"] = worst_table["Percent of customers (%)"].astype(str)
 
-            # Best Aspects Table
-            st.markdown("### 🏅 Best Aspects of Your Product")
-            if best_aspects:
-                best_table = pd.DataFrame([
-                    {"Aspect": best_aspects.get("aspect1", "N/A"), "Percent (%)": best_aspects.get("percentage1", "N/A")},
-                    {"Aspect": best_aspects.get("aspect2", "N/A"), "Percent (%)": best_aspects.get("percentage2", "N/A")},
-                    {"Aspect": best_aspects.get("aspect3", "N/A"), "Percent (%)": best_aspects.get("percentage3", "N/A")},
-                    {"Aspect": "Other", "Percent (%)": best_aspects.get("other", "N/A")},
-                ])
-                st.dataframe(best_table, use_container_width=True, hide_index=True)
-                st.caption("Percent (%) shows the percentage of customers who chose each as the best thing about your product.")
-            else:
-                st.write("No best aspects data available.")
+        st.markdown("### 🏅 Best reasons people like your product")
+        st.dataframe(best_table, use_container_width=True, hide_index=True)
+        st.caption("Percent of customers (%) means how many people picked that reason as their favorite part.")
 
-            # Worst Aspects Table
-            st.markdown("### 🚧 Worst Aspects of Your Product")
-            if worst_aspects:
-                worst_table = pd.DataFrame([
-                    {"Aspect": worst_aspects.get("aspect1", "N/A"), "Percent (%)": worst_aspects.get("percentage1", "N/A")},
-                    {"Aspect": worst_aspects.get("aspect2", "N/A"), "Percent (%)": worst_aspects.get("percentage2", "N/A")},
-                    {"Aspect": worst_aspects.get("aspect3", "N/A"), "Percent (%)": worst_aspects.get("percentage3", "N/A")},
-                    {"Aspect": "Other", "Percent (%)": worst_aspects.get("other", "N/A")},
-                ])
-                st.dataframe(worst_table, use_container_width=True, hide_index=True)
-                st.caption("Percent (%) shows the percentage of customers who picked each as the biggest thing to improve.")
-            else:
-                st.write("No worst aspects data available.")
+        st.markdown("### 🚧 Top things to improve")
+        st.dataframe(worst_table, use_container_width=True, hide_index=True)
+        st.caption("Percent of customers (%) means how many people picked that reason as the biggest thing to fix.")
 
-            # Customer Comments
-            st.markdown("### 💬 Sample Customer Comments")
-            if comments:
-                for i, comment in enumerate(comments):
-                    st.info(f"🗣️  {comment}")
-            else:
-                st.write("No comments available.")
+        # Comments
+        comments = data.get("comments", [])
+        st.markdown("### 💬 Customer-style comments")
+        if comments:
+            for c in comments:
+                st.info(f"🗣️ {c}")
+        else:
+            st.write("No comments available.")
 
-        except Exception as e:
-            st.error("There was a problem parsing the AI's response. Here is the raw output:")
-            st.code(ai_result)
+    except Exception as e:
+        st.error("AI response could not be parsed. Here's what we got:")
+        st.code(locals().get("raw", "<no raw output>"))
+
+# =====================
+# Persist current profile in session
+# =====================
+st.session_state._current_profile = dict(
+    product_name=product_name,
+    product_desc=product_desc,
+    time_minutes=time_minutes,
+    materials_cost=materials_cost,
+    packaging_cost=packaging_cost,
+    equip_name=equip_name,
+    equip_cost=equip_cost,
+    equip_units=equip_units,
+    equip_date=str(equip_date),
+    hourly_wage=hourly_wage,
+    other_prod_cost=other_prod_cost,
+    shipping_cost=shipping_cost,
+    platform_fee_pct=platform_fee_pct,
+    platform_fee_fixed=platform_fee_fixed,
+    monthly_expenses=monthly_expenses,
+    avg_units_per_month=avg_units_per_month,
+    notes=notes,
+    margin_pct=margin_pct,
+)
+
+# Download profile as JSON
+profile_json = json.dumps(st.session_state._current_profile, indent=2)
+st.download_button("⬇️ Download profile JSON", data=profile_json, file_name=f"{product_name or 'product'}.json", mime="application/json")
 
 st.markdown("---")
-st.caption("Made with Streamlit & OpenAI | For learning and fun! ✨")
+st.caption("Made with Streamlit + OpenAI • Learn by doing • You got this! ✨")
+
