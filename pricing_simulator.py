@@ -435,14 +435,8 @@ else:
 
     # Unique Value Proposition
     st.subheader("Unique value proposition")
-    key_benefits = st.text_input("Key differentiating benefits", value=st.session_state.get("key_benefits", ""))
-    main_strength = st.slider("Strength of main benefit (1-5)", 1, 5, value=int(st.session_state.get("main_strength", 3)))
     special_adv = st.text_input("Special advantages over alternatives", value=st.session_state.get("special_adv", ""))
-
-    # Market validation
-    st.subheader("Market validation")
-    interviews = st.text_area("Customer interview insights", value=st.session_state.get("interviews", ""))
-    value_feedback = st.text_area("Value feedback received", value=st.session_state.get("value_feedback", ""))
+    main_strength = st.slider("Strength of main benefit (1-5)", 1, 5, value=int(st.session_state.get("main_strength", 3)))
 
     # Additional notes
     st.subheader("Additional notes")
@@ -548,11 +542,8 @@ if st.button("Generate AI Analysis"):
             "wtp_min_expected": float(wtp_min_expected),
             "vb_unit_cost": float(vb_unit_cost),
             "vb_min_profitable": float(vb_min_profitable),
-            "key_benefits": key_benefits,
             "main_strength": int(main_strength),
             "special_adv": special_adv,
-            "interviews": interviews,
-            "value_feedback": value_feedback,
             "vb_notes": vb_notes,
             "recommended_price": float(recommended_vb),
             "sweet_spot_low": float(sweet_low_vb),
