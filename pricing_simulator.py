@@ -43,7 +43,7 @@ if "materials" not in st.session_state:
 if "equipment" not in st.session_state:
     st.session_state.equipment = [{"name": "Starter Tool", "units_supported": 200, "total_cost": 25.0}]
 if "competitors" not in st.session_state:
-    st.session_state.competitors = [{"name": "Competitor 1", "price": 8.0, "source": "Local shop"}]
+    st.session_state.competitors = [{"name": "Competitor 1", "price": 8.0, "differences": ""}]
 
 # =====================
 # Product basics
@@ -61,7 +61,7 @@ product_desc_help = (
     " is assembled using a jig for consistent tension, and is packaged in a recyclable kraft sleeve. Target customers are middle-school students and hikers"
     " seeking durable, customizable accessories. Production occurs in small batches of 25 to maintain quality control.'"
 )
-product_desc = st.text_area("Detailed product description (be specific)", value=st.session_state.get("product_desc", ""), help=product_desc_help)
+product_desc = st.text_area("Detailed product description (be as specific as possible)", value=st.session_state.get("product_desc", ""), help=product_desc_help)
 
 colT1, colT2 = st.columns(2)
 with colT1:
@@ -69,8 +69,11 @@ with colT1:
 with colT2:
     sales_channel = st.text_input("Primary sales channel (online, local, school, etc.)", value=st.session_state.get("sales_channel", ""))
 
+# Additional product info (moved before Location)
+additional_info = st.text_area("Additional information (constraints, objectives, differentiators)", value=st.session_state.get("additional_info", ""))
+
 # =====================
-# Location section
+# Location section (separate)
 # =====================
 st.markdown("---")
 st.subheader("Location")
@@ -80,13 +83,12 @@ with loc1:
 with loc2:
     state = st.text_input("State/Region", value=st.session_state.get("state", ""))
 
-# Additional product info
-additional_info = st.text_area("Additional information (constraints, objectives, differentiators)", value=st.session_state.get("additional_info", ""))
-
 # =====================
-# Pricing approach selector
+# Pricing approach selector (own section)
 # =====================
-pricing_mode = st.selectbox("Choose pricing approach", ["Cost-plus", "Market-based"], index=0)
+st.markdown("---")
+st.subheader("Choose pricing approach")
+pricing_mode = st.selectbox("Pricing method", ["Cost-plus", "Market-based"], index=0)
 
 # =====================
 # COST-PLUS FLOW
@@ -224,15 +226,20 @@ else:
     st.subheader("Competitor analysis")
     add_comp_col = st.columns([3,7])[0]
     if add_comp_col.button("Add competitor +", use_container_width=True):
-        st.session_state.competitors.append({"name": "", "price": 0.0, "source": ""})
+        st.session_state.competitors.append({"name": "", "price": 0.0, "differences": ""})
     comp_rows = []
     for i, comp in enumerate(st.session_state.competitors):
-        c1, c2, c3 = st.columns([3,2,3])
+        c1, c2 = st.columns([3,2])
         cname = c1.text_input(f"Competitor {i+1} name", value=comp.get("name", ""), key=f"comp_name_{i}")
         cprice = c2.number_input(f"Competitor {i+1} price ($)", min_value=0.0, value=float(comp.get("price", 0.0)), step=0.10, key=f"comp_price_{i}")
-        csrc = c3.text_input(f"Data source {i+1}", value=comp.get("source", ""), key=f"comp_src_{i}")
-        st.session_state.competitors[i] = {"name": cname, "price": cprice, "source": csrc}
-        comp_rows.append({"Name": cname or f"Competitor {i+1}", "Price": round(cprice, 2), "Source": csrc})
+        cdiff = st.text_area(
+            f"Differences vs your product — strengths and weaknesses for Competitor {i+1}",
+            value=comp.get("differences", comp.get("source", "")),
+            help="What is different about their product vs yours? Materials, quality, features, size, packaging, reputation, shipping time, warranty, etc.",
+            key=f"comp_diff_{i}"
+        )
+        st.session_state.competitors[i] = {"name": cname, "price": cprice, "differences": cdiff}
+        comp_rows.append({"Name": cname or f"Competitor {i+1}", "Price": round(cprice, 2), "Differences": cdiff})
     competitors_df = pd.DataFrame(comp_rows)
 
     # Cost foundation
@@ -244,18 +251,13 @@ else:
     st.subheader("Target market")
     demo = st.text_input("Customer demographic (age group, relationship to seller)", value=st.session_state.get("demo", ""))
     spend_range = st.text_input("Typical spending range for this category ($)", value=st.session_state.get("spend_range", ""))
-    comp_level = st.selectbox("Competition level", ["Low", "Medium", "High"], index=1)
+    comp_level = st.selectbox("Competition level", ["Very low", "Low", "Medium", "High", "Very high"], index=2)
 
     # Product positioning
     st.subheader("Product positioning")
     quality_level = st.selectbox("Quality level", ["Budget", "Standard", "Premium"], index=1)
     usp = st.text_input("Unique selling points", value=st.session_state.get("usp", ""))
     features = st.text_input("Special features or benefits", value=st.session_state.get("features", ""))
-
-    # Market timing
-    st.subheader("Market timing")
-    season = st.text_input("Selling season or timing", value=st.session_state.get("season", ""))
-    trend_status = st.text_input("Current trend status", value=st.session_state.get("trend_status", ""))
 
     # Additional notes
     st.subheader("Additional notes")
@@ -277,7 +279,6 @@ else:
     c3.metric("High competitor price", f"${comp_high:.2f}")
 
     # Simple positioning visualizer
-    # Map quality to numeric for plotting
     quality_map = {"Budget": 1, "Standard": 2, "Premium": 3}
     points = [{"Label": r["Name"], "Quality": 2, "Price": r["Price"]} for _, r in competitors_df.iterrows()]
     points.append({"Label": product_name or "Your product", "Quality": quality_map.get(quality_level, 2), "Price": comp_avg if comp_avg else mb_min_profitable})
@@ -287,7 +288,6 @@ else:
     st.plotly_chart(pos_fig, use_container_width=True)
 
     # Price recommendation and sweet spot finder
-    # Base on comp_avg anchored by cost floor
     if comp_avg and comp_avg > 0:
         recommended = max(mb_min_profitable, comp_avg)
     else:
@@ -303,7 +303,8 @@ else:
 
     # Competitor comparison chart
     chart_df = competitors_df.copy()
-    chart_df = chart_df.append({"Name": product_name or "Your product", "Price": recommended, "Source": "Recommendation"}, ignore_index=True)
+    rec_row = pd.DataFrame([{ "Name": product_name or "Your product", "Price": recommended }])
+    chart_df = pd.concat([chart_df, rec_row], ignore_index=True)
     bar = px.bar(chart_df, x="Name", y="Price", title="Competitor prices vs your recommendation")
     st.plotly_chart(bar, use_container_width=True)
 
@@ -351,8 +352,6 @@ if st.button("Generate AI Analysis"):
             "quality_level": quality_level,
             "usp": usp,
             "features": features,
-            "season": season,
-            "trend_status": trend_status,
             "market_notes": market_notes,
             "recommended_price": float(recommended),
             "sweet_spot_low": float(sweet_low),
@@ -380,7 +379,7 @@ if st.button("Generate AI Analysis"):
       "competitive_summary": "...",
       "comments": ["..."],
       "best_aspects": {{"aspect1": "...", "percentage1": 60, "aspect2": "...", "percentage2": 30, "other": 10}},
-      "worst_aspects": {{"aspect1": "...", "percentage1": 50, "aspect2": 35, "other": 15}},
+      "worst_aspects": {{"aspect1": "...", "percentage1": 50, "percentage2": 35, "other": 15}},
       "star_ratings": {{"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}}
     }}
     """
