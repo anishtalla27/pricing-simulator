@@ -91,14 +91,10 @@ st.subheader("Choose pricing approach")
 
 # Quick, kid-friendly overview
 st.markdown(
-    """
-    <div class='note'>
-      <b>Cost-plus pricing:</b> Start from your costs, then add a target margin to set a price. Best when you know your costs clearly and want a simple, reliable price.<br>
-      <b>Market-based pricing:</b> Look at competitor prices and what buyers are willing to pay, then pick a price that fits your product’s position.
-    </div>
-    """,
-    unsafe_allow_html=True,
+    "**Cost-plus pricing:** Start from your costs, then add a target margin to set a price. Best when you know your costs clearly and want a simple, reliable price.\n\n"
+    "**Market-based pricing:** Look at competitor prices and what buyers are willing to pay, then pick a price that fits your product’s position."
 )
+
 
 pricing_mode = st.selectbox(
     "Pricing method",
