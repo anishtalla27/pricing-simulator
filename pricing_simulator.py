@@ -82,8 +82,8 @@ if add_mat_col.button("Add material +", use_container_width=True):
 mat_rows = []
 for i, item in enumerate(st.session_state.materials):
     c1, c2 = st.columns([3,2])
-    name = c1.text_input(f"Material {i+1} name", value=item["name"], key=f"mat_name_{i}")
-    cost = c2.number_input(f"Material {i+1} cost per unit ($)", min_value=0.0, value=float(item["unit_cost"]), step=0.01, key=f"mat_cost_{i}")
+    name = c1.text_input(f"Material {i+1} name", value=item.get("name", ""), key=f"mat_name_{i}")
+    cost = c2.number_input(f"Material {i+1} cost per unit ($)", min_value=0.0, value=float(item.get("unit_cost", 0.0)), step=0.01, key=f"mat_cost_{i}")
     st.session_state.materials[i] = {"name": name, "unit_cost": cost}
     mat_rows.append({"Material": name or f"Material {i+1}", "$ / unit": round(cost, 2)})
 
@@ -119,18 +119,52 @@ add_eqp_col = st.columns([3,7])[0]
 if add_eqp_col.button("Add equipment +", use_container_width=True):
     st.session_state.equipment.append({"name": "", "units_supported": 100, "total_cost": 0.0})
 
+# Migrate legacy keys from older versions
+for idx, _eq in enumerate(st.session_state.equipment):
+    if "units_supported" not in _eq and "cap_units" in _eq:
+        try:
+            st.session_state.equipment[idx]["units_supported"] = int(_eq.get("cap_units") or 100)
+        except Exception:
+            st.session_state.equipment[idx]["units_supported"] = 100
+    if "total_cost" not in _eq and "tcost" in _eq:
+        try:
+            st.session_state.equipment[idx]["total_cost"] = float(_eq.get("tcost") or 0.0)
+        except Exception:
+            st.session_state.equipment[idx]["total_cost"] = 0.0
+
+# Build equipment UI rows safely
 eq_rows = []
 for j, eq in enumerate(st.session_state.equipment):
     c1, c2, c3 = st.columns([3,2,2])
-    ename = c1.text_input(f"Equipment {j+1} name", value=eq["name"], key=f"eq_name_{j}")
-    units_supported = c2.number_input(f"Products it can help make (lifetime)", min_value=1, value=int(eq["units_supported"]), step=1, key=f"eq_units_{j}")
-    tcost = c3.number_input(f"Total cost {j+1} ($)", min_value=0.0, value=float(eq["total_cost"]), step=1.0, key=f"eq_cost_{j}")
+    ename = c1.text_input(f"Equipment {j+1} name", value=eq.get("name", ""), key=f"eq_name_{j}")
+    default_units = int(eq.get("units_supported", eq.get("cap_units", 100)) or 100)
+    units_supported = c2.number_input(
+        "Products it can help make (lifetime)",
+        min_value=1,
+        value=default_units,
+        step=1,
+        key=f"eq_units_{j}"
+    )
+    default_cost = float(eq.get("total_cost", eq.get("tcost", 0.0)) or 0.0)
+    tcost = c3.number_input(
+        f"Total cost {j+1} ($)",
+        min_value=0.0,
+        value=default_cost,
+        step=1.0,
+        key=f"eq_cost_{j}"
+    )
     st.session_state.equipment[j] = {"name": ename, "units_supported": units_supported, "total_cost": tcost}
     per_unit = (tcost / units_supported) if units_supported > 0 else 0.0
     eq_rows.append({"Equipment": ename or f"Equipment {j+1}", "Per-unit amortization ($)": round(per_unit, 4)})
 
 equipment_df = pd.DataFrame(eq_rows)
-equipment_unit_total = sum([(e["total_cost"] / e["units_supported"]) for e in st.session_state.equipment if e["units_supported"] > 0])
+# Safe aggregation even if legacy keys linger
+equipment_unit_total = 0.0
+for e in st.session_state.equipment:
+    us = int(e.get("units_supported", e.get("cap_units", 0)) or 0)
+    tc = float(e.get("total_cost", e.get("tcost", 0.0)) or 0.0)
+    if us > 0:
+        equipment_unit_total += tc / us
 
 production_total = packaging_unit + equipment_unit_total
 colPS1, colPS2 = st.columns(2)
