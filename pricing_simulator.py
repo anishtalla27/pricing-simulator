@@ -8,7 +8,7 @@ from openai import OpenAI
 # =====================
 # Setup
 # =====================
-st.set_page_config(page_title="Professional Cost-Plus Pricing Studio", page_icon=":briefcase:", layout="centered")
+st.set_page_config(page_title="Professional Pricing Studio", page_icon=":briefcase:", layout="centered")
 client = OpenAI(api_key=st.secrets["openai"]["api_key"])
 
 # Background + UI polish
@@ -16,7 +16,6 @@ st.markdown(
     """
     <style>
       .stApp { background: radial-gradient(circle at 50% 40%, #0e3d5a 0%, #175a80 55%, #e7f6ff 100%); min-height: 100vh; }
-      .note { background:#eef8ff; border-left:5px solid #0ea5e9; padding:0.6rem 0.8rem; border-radius:6px; }
       div[data-testid="stTextArea"] { margin-bottom: 0px; }
       div[data-testid="column"] button { white-space: nowrap; }
     </style>
@@ -27,9 +26,9 @@ st.markdown(
 st.markdown(
     """
 <div style='text-align:center; font-size:34px; font-weight:800; color:#0ea5e9;'>
-  Professional Cost-Plus Pricing Studio
+  Professional Pricing Studio
 </div>
-<div style='text-align:center; color:#13d0ff;'>Calculate unit economics, structure pricing, and stress-test decisions.</div>
+<div style='text-align:center; color:#13d0ff;'>Calculate unit economics, compare to market, and price based on value.</div>
 """,
     unsafe_allow_html=True,
 )
@@ -44,6 +43,10 @@ if "equipment" not in st.session_state:
     st.session_state.equipment = [{"name": "Starter Tool", "units_supported": 200, "total_cost": 25.0}]
 if "competitors" not in st.session_state:
     st.session_state.competitors = [{"name": "Competitor 1", "price": 8.0, "differences": ""}]
+if "vb_benefits" not in st.session_state:
+    st.session_state.vb_benefits = [{"benefit": "Saves time on setup", "impact": 3, "consequence": "Takes longer without it"}]
+if "vb_alternatives" not in st.session_state:
+    st.session_state.vb_alternatives = [{"name": "Do it by hand", "cost": 2.0}]
 
 # =====================
 # Product basics
@@ -57,7 +60,7 @@ with colB:
 
 product_desc_help = (
     "Provide a precise, professional description including materials, process, unique value proposition, and expected use-cases."
-    "Example: 'We produce 8-inch woven paracord bracelets with stainless-steel clasps for outdoor enthusiasts. Each unit uses 3 meters of Type III 550 paracord,"
+    " Example: 'We produce 8-inch woven paracord bracelets with stainless-steel clasps for outdoor enthusiasts. Each unit uses 3 meters of Type III 550 paracord,"
     " is assembled using a jig for consistent tension, and is packaged in a recyclable kraft sleeve. Target customers are middle-school students and hikers"
     " seeking durable, customizable accessories. Production occurs in small batches of 25 to maintain quality control.'"
 )
@@ -65,15 +68,15 @@ product_desc = st.text_area("Detailed product description (be as specific as pos
 
 colT1, colT2 = st.columns(2)
 with colT1:
-    target_audience = st.text_input("Target audience (segments/personas)", value=st.session_state.get("target_audience", ""))
+    target_audience = st.text_input("Target audience (segments or personas)", value=st.session_state.get("target_audience", ""))
 with colT2:
     sales_channel = st.text_input("Primary sales channel (online, local, school, etc.)", value=st.session_state.get("sales_channel", ""))
 
-# Additional product info (moved before Location)
+# Additional product info (before Location)
 additional_info = st.text_area("Additional information (constraints, objectives, differentiators)", value=st.session_state.get("additional_info", ""))
 
 # =====================
-# Location section (separate)
+# Location section
 # =====================
 st.markdown("---")
 st.subheader("Location")
@@ -81,43 +84,46 @@ loc1, loc2 = st.columns(2)
 with loc1:
     city = st.text_input("City", value=st.session_state.get("city", ""))
 with loc2:
-    state = st.text_input("State/Region", value=st.session_state.get("state", ""))
+    state = st.text_input("State or Region", value=st.session_state.get("state", ""))
 
 # =====================
-# Pricing approach selector (own section)
+# Pricing approach selector
 # =====================
 st.markdown("---")
 st.subheader("Choose pricing approach")
 
-# Quick, kid-friendly overview
+# Clear, kid friendly overview with plain markdown
 st.markdown(
-    "**Cost-plus pricing:** Start from your costs, then add a target margin to set a price. Best when you know your costs clearly and want a simple, reliable price.\n\n"
-    "**Market-based pricing:** Look at competitor prices and what buyers are willing to pay, then pick a price that fits your product’s position."
+    "**Cost-plus pricing:** Start from your costs, then add a target margin to set a price. Good when you know your costs and want a simple result."
+    "**Market-based pricing:** Look at competitor prices and buyer willingness to pay, then choose a price that fits your product's position."
+    "**Value-based pricing:** Price according to the value your product creates for customers, like time or money saved compared to alternatives."
 )
-
 
 pricing_mode = st.selectbox(
     "Pricing method",
-    ["Cost-plus", "Market-based"],
+    ["Cost-plus", "Market-based", "Value-based"],
     index=0,
-    help="Cost-plus: price from costs and a margin. Market-based: price from competitor prices and buyer willingness to pay."
+    help="Cost-plus: price from costs and a margin. Market-based: price from competitors and willingness to pay. Value-based: price from benefits and savings you create."
 )
 
-# Optional: deeper guidance (expanded by default for clarity)
 with st.expander("What is Cost-plus pricing?", expanded=True):
     st.write(
-        "- Add up COGS, variable, and production costs per unit.\n"
-        "- Choose a target margin (for example 40 percent).\n"
-        "- Price = Unit cost × (1 + margin). Simple and stable."
+        "- Add COGS, variable, and production costs per unit."
+        "- Choose a target margin for profit."
+        "- Price = Unit cost x (1 + margin)."
     )
-
 with st.expander("What is Market-based pricing?", expanded=True):
     st.write(
-        "- Collect competitor prices and note differences.\n"
-        "- Think about who will buy and how much they usually spend.\n"
-        "- Choose a price that fits your quality level and still beats your minimum profitable price."
+        "- Collect competitor prices and note differences."
+        "- Consider who will buy and typical spend."
+        "- Pick a price that fits your quality and stays above your minimum profitable price."
     )
-
+with st.expander("What is Value-based pricing?", expanded=True):
+    st.write(
+        "- Find the value your product creates like time and money saved."
+        "- Compare with what customers use today and what that costs."
+        "- Set a price that reflects part of that value and is acceptable to customers."
+    )
 
 # =====================
 # COST-PLUS FLOW
@@ -140,7 +146,7 @@ if pricing_mode == "Cost-plus":
 
     materials_df = pd.DataFrame(mat_rows)
     materials_total = sum([m["unit_cost"] for m in st.session_state.materials])
-    st.metric("Materials subtotal (per unit)", f"${materials_total:.2f}")
+    st.metric("Materials subtotal per unit", f"${materials_total:.2f}")
 
     # Section 2: Variable Costs
     st.markdown("---")
@@ -152,14 +158,14 @@ if pricing_mode == "Cost-plus":
         variable_selling = st.number_input("Other variable selling expense per unit ($)", min_value=0.0, value=st.session_state.get("variable_selling", 0.00), step=0.10)
 
     variable_total = shipping_unit + variable_selling
-    st.metric("Variable costs subtotal (per unit)", f"${variable_total:.2f}")
+    st.metric("Variable costs subtotal per unit", f"${variable_total:.2f}")
 
     # Section 3: Production Costs
     st.markdown("---")
     st.header("Production Costs")
     packaging_unit = st.number_input("Packaging cost per unit ($)", min_value=0.0, value=st.session_state.get("packaging_unit", 0.50), step=0.05)
 
-    st.markdown("### Machinery and tools (amortized per unit)")
+    st.markdown("### Machinery and tools amortized per unit")
     add_eqp_col = st.columns([3,7])[0]
     if add_eqp_col.button("Add equipment +", use_container_width=True):
         st.session_state.equipment.append({"name": "", "units_supported": 100, "total_cost": 0.0})
@@ -201,7 +207,7 @@ if pricing_mode == "Cost-plus":
         )
         st.session_state.equipment[j] = {"name": ename, "units_supported": units_supported, "total_cost": tcost}
         per_unit = (tcost / units_supported) if units_supported > 0 else 0.0
-        eq_rows.append({"Equipment": ename or f"Equipment {j+1}", "Per-unit amortization ($)": round(per_unit, 4)})
+        eq_rows.append({"Equipment": ename or f"Equipment {j+1}", "Per unit amortization ($)": round(per_unit, 4)})
 
     equipment_df = pd.DataFrame(eq_rows)
     equipment_unit_total = 0.0
@@ -232,11 +238,11 @@ if pricing_mode == "Cost-plus":
         st.metric("Target margin", f"{margin_pct}%")
         st.metric("Gross profit per unit", f"${unit_gross_profit:.2f}")
 
-    additional_cost_info = st.text_area("Additional cost information (special expenses, context)", value=st.session_state.get("additional_cost_info", ""))
+    additional_cost_info = st.text_area("Additional cost information (special expenses or context)", value=st.session_state.get("additional_cost_info", ""))
 
     # Visuals
     comp_df = pd.DataFrame([
-        {"Category": "COGS (materials)", "$ / unit": round(materials_total, 2)},
+        {"Category": "COGS materials", "$ / unit": round(materials_total, 2)},
         {"Category": "Variable costs", "$ / unit": round(variable_total, 2)},
         {"Category": "Production costs", "$ / unit": round(production_total, 2)},
     ])
@@ -247,7 +253,7 @@ if pricing_mode == "Cost-plus":
 # =====================
 # MARKET-BASED FLOW
 # =====================
-else:
+elif pricing_mode == "Market-based":
     st.markdown("---")
     st.header("Market Inputs")
 
@@ -264,11 +270,10 @@ else:
         cdiff = st.text_area(
             f"Compare to your product: strengths and weaknesses for Competitor {i+1}",
             value=comp.get("differences", ""),
-            help="Explain how this competitor differs from your product: materials, quality, features, size, packaging, brand reputation, shipping speed, warranty, and anything else that stands out.",
-            placeholder="Example: Uses plastic clasp (we use metal); ships in 7 days (we deliver same day at school); slightly lower quality beads; stronger brand on social media.",
+            help="How is their product different from yours? Materials, quality, features, size, packaging, brand reputation, shipping speed, warranty, etc.",
+            placeholder="Example: Uses plastic clasp (we use metal); ships in 7 days (we deliver same day at school); slightly lower quality beads; stronger social brand.",
             key=f"comp_diff_{i}"
         )
-
 
         st.session_state.competitors[i] = {"name": cname, "price": cprice, "differences": cdiff}
         comp_rows.append({"Name": cname or f"Competitor {i+1}", "Price": round(cprice, 2), "Differences": cdiff})
@@ -315,7 +320,7 @@ else:
     points = [{"Label": r["Name"], "Quality": 2, "Price": r["Price"]} for _, r in competitors_df.iterrows()]
     points.append({"Label": product_name or "Your product", "Quality": quality_map.get(quality_level, 2), "Price": comp_avg if comp_avg else mb_min_profitable})
     pos_df = pd.DataFrame(points)
-    pos_fig = px.scatter(pos_df, x="Quality", y="Price", text="Label", title="Market positioning (quality vs price)", range_x=[0.5,3.5])
+    pos_fig = px.scatter(pos_df, x="Quality", y="Price", text="Label", title="Market positioning quality vs price", range_x=[0.5,3.5])
     pos_fig.update_traces(textposition="top center")
     st.plotly_chart(pos_fig, use_container_width=True)
 
@@ -339,6 +344,118 @@ else:
     chart_df = pd.concat([chart_df, rec_row], ignore_index=True)
     bar = px.bar(chart_df, x="Name", y="Price", title="Competitor prices vs your recommendation")
     st.plotly_chart(bar, use_container_width=True)
+
+# =====================
+# VALUE-BASED FLOW
+# =====================
+else:
+    st.markdown("---")
+    st.header("Value Inputs")
+
+    # Core problem
+    core_problem = st.text_input("Core problem the product solves", value=st.session_state.get("core_problem", ""))
+
+    # Customer Value Discovery
+    st.subheader("Customer value discovery")
+    add_benefit_col = st.columns([3,7])[0]
+    if add_benefit_col.button("Add benefit +", use_container_width=True):
+        st.session_state.vb_benefits.append({"benefit": "", "impact": 3, "consequence": ""})
+
+    vb_rows = []
+    for i, b in enumerate(st.session_state.vb_benefits):
+        c1, c2 = st.columns([4,1])
+        benefit = c1.text_input(f"Benefit {i+1}", value=b.get("benefit", ""), key=f"vb_ben_{i}")
+        impact = c2.slider(f"Impact {i+1} (1-5)", 1, 5, value=int(b.get("impact", 3)), key=f"vb_imp_{i}")
+        consequence = st.text_area(f"Consequence if missing {i+1}", value=b.get("consequence", ""), key=f"vb_con_{i}")
+        st.session_state.vb_benefits[i] = {"benefit": benefit, "impact": impact, "consequence": consequence}
+        vb_rows.append({"Benefit": benefit or f"Benefit {i+1}", "Impact": impact, "Consequence": consequence})
+    vb_df = pd.DataFrame(vb_rows)
+
+    # Alternatives
+    st.subheader("Alternatives customers use today")
+    add_alt_col = st.columns([3,7])[0]
+    if add_alt_col.button("Add alternative +", use_container_width=True):
+        st.session_state.vb_alternatives.append({"name": "", "cost": 0.0})
+
+    alt_rows = []
+    for i, a in enumerate(st.session_state.vb_alternatives):
+        c1, c2 = st.columns([3,2])
+        aname = c1.text_input(f"Alternative {i+1} name", value=a.get("name", ""), key=f"vb_alt_name_{i}")
+        acost = c2.number_input(f"Alternative {i+1} cost ($)", min_value=0.0, value=float(a.get("cost", 0.0)), step=0.10, key=f"vb_alt_cost_{i}")
+        st.session_state.vb_alternatives[i] = {"name": aname, "cost": acost}
+        alt_rows.append({"Alternative": aname or f"Alternative {i+1}", "Cost": round(acost, 2)})
+    alt_df = pd.DataFrame(alt_rows)
+
+    # Savings
+    st.subheader("Savings and willingness to pay")
+    colS1, colS2, colS3 = st.columns(3)
+    with colS1:
+        money_saved = st.number_input("Money saved per unit for customer ($)", min_value=0.0, value=float(st.session_state.get("money_saved", 0.0)), step=0.10)
+    with colS2:
+        minutes_saved = st.number_input("Minutes saved per unit for customer", min_value=0, value=int(st.session_state.get("minutes_saved", 0)), step=5)
+    with colS3:
+        value_of_time = st.number_input("Value of time ($ per hour)", min_value=0.0, value=float(st.session_state.get("value_of_time", 12.0)), step=1.0)
+
+    colW1, colW2, colW3 = st.columns(3)
+    with colW1:
+        wtp_typical = st.number_input("Typical willingness to pay ($)", min_value=0.0, value=float(st.session_state.get("wtp_typical", 5.0)), step=0.10)
+    with colW2:
+        wtp_max = st.number_input("Maximum price customers might accept ($)", min_value=0.0, value=float(st.session_state.get("wtp_max", 10.0)), step=0.10)
+    with colW3:
+        wtp_min_expected = st.number_input("Minimum price customers expect ($)", min_value=0.0, value=float(st.session_state.get("wtp_min_expected", 0.0)), step=0.10)
+
+    # Cost foundation
+    st.subheader("Cost foundation")
+    vb_unit_cost = st.number_input("Production cost per unit ($)", min_value=0.0, value=float(st.session_state.get("vb_unit_cost", 2.0)), step=0.10)
+    vb_min_profitable = st.number_input("Minimum profitable price ($)", min_value=0.0, value=float(st.session_state.get("vb_min_profitable", 3.0)), step=0.10)
+
+    # Unique Value Proposition
+    st.subheader("Unique value proposition")
+    key_benefits = st.text_input("Key differentiating benefits", value=st.session_state.get("key_benefits", ""))
+    main_strength = st.slider("Strength of main benefit (1-5)", 1, 5, value=int(st.session_state.get("main_strength", 3)))
+    special_adv = st.text_input("Special advantages over alternatives", value=st.session_state.get("special_adv", ""))
+
+    # Market validation
+    st.subheader("Market validation")
+    interviews = st.text_area("Customer interview insights", value=st.session_state.get("interviews", ""))
+    value_feedback = st.text_area("Value feedback received", value=st.session_state.get("value_feedback", ""))
+
+    # Additional notes
+    st.subheader("Additional notes")
+    vb_notes = st.text_area("Other value considerations or customer insights", value=st.session_state.get("vb_notes", ""))
+
+    # Derived calculators
+    alt_costs = [row["Cost"] for _, row in alt_df.iterrows() if row.get("Cost") is not None]
+    alt_avg = float(np.mean(alt_costs)) if len(alt_costs) > 0 else 0.0
+    time_value = (minutes_saved / 60.0) * value_of_time
+    estimated_value = max(0.0, (alt_avg - vb_unit_cost) + money_saved + time_value)
+
+    # Value to price recommendation engine
+    base_from_value = 0.6 * wtp_typical + 0.4 * estimated_value
+    recommended_vb = max(vb_min_profitable, min(wtp_max, base_from_value))
+    sweet_low_vb = max(vb_min_profitable, max(wtp_min_expected, recommended_vb * 0.95))
+    sweet_high_vb = min(wtp_max if wtp_max > 0 else recommended_vb * 1.2, recommended_vb * 1.10)
+
+    st.markdown("### Value recommendation")
+    r1, r2, r3 = st.columns(3)
+    r1.metric("Recommended price", f"${recommended_vb:.2f}")
+    r2.metric("Sweet spot low", f"${sweet_low_vb:.2f}")
+    r3.metric("Sweet spot high", f"${sweet_high_vb:.2f}")
+
+    # Alternative cost comparison chart
+    if not alt_df.empty:
+        vb_chart_df = alt_df.copy()
+        vb_chart_df = pd.concat([vb_chart_df, pd.DataFrame([{"Alternative": product_name or "Your product", "Cost": recommended_vb}])], ignore_index=True)
+        vb_bar = px.bar(vb_chart_df, x="Alternative", y="Cost", title="Alternative costs vs your recommended price")
+        st.plotly_chart(vb_bar, use_container_width=True)
+
+    # Interview questions helper
+    with st.expander("Interview questions you can use", expanded=True):
+        st.write("- What problem does this product solve for you right now?")
+        st.write("- What do you use instead today and what does that cost you?")
+        st.write("- How much time would this save you each time you use it?")
+        st.write("- If you could not buy this, what would you do instead?")
+        st.write("- At what price would you think this is a great deal? A bit expensive? Too expensive?")
 
 # =====================
 # AI analysis and outputs (shared)
@@ -373,7 +490,7 @@ if st.button("Generate AI Analysis"):
             "gross_profit_per_unit": float(unit_gross_profit),
             "additional_cost_info": st.session_state.get("additional_cost_info", ""),
         })
-    else:
+    elif pricing_mode == "Market-based":
         payload.update({
             "competitors": st.session_state.competitors,
             "mb_unit_cost": float(mb_unit_cost),
@@ -392,11 +509,36 @@ if st.button("Generate AI Analysis"):
             "comp_avg": float(comp_avg),
             "comp_high": float(comp_high),
         })
+    else:
+        payload.update({
+            "core_problem": core_problem,
+            "benefits": st.session_state.vb_benefits,
+            "alternatives": st.session_state.vb_alternatives,
+            "money_saved": float(money_saved),
+            "minutes_saved": int(minutes_saved),
+            "value_of_time": float(value_of_time),
+            "estimated_value": float(estimated_value),
+            "wtp_typical": float(wtp_typical),
+            "wtp_max": float(wtp_max),
+            "wtp_min_expected": float(wtp_min_expected),
+            "vb_unit_cost": float(vb_unit_cost),
+            "vb_min_profitable": float(vb_min_profitable),
+            "key_benefits": key_benefits,
+            "main_strength": int(main_strength),
+            "special_adv": special_adv,
+            "interviews": interviews,
+            "value_feedback": value_feedback,
+            "vb_notes": vb_notes,
+            "recommended_price": float(recommended_vb),
+            "sweet_spot_low": float(sweet_low_vb),
+            "sweet_spot_high": float(sweet_high_vb),
+            "alt_avg_cost": float(alt_avg),
+        })
 
     payload["n_customers"] = int(n_customers)
 
     prompt = f"""
-    Act as a pricing and go-to-market advisor for a youth entrepreneur. Use every field in Data to tailor your analysis, including location and audience. If pricing_mode is Market-based, ground advice in competitor landscape and willingness to pay. If Cost-plus, ground advice in unit economics. Keep tone encouraging and professional.
+    Act as a pricing and go-to-market advisor for a youth entrepreneur. Use every field in Data to tailor your analysis, including location and audience. If pricing_mode is Market-based, ground advice in competitor landscape and willingness to pay. If Cost-plus, ground advice in unit economics. If Value-based, ground advice in customer benefits, alternatives, savings, and willingness to pay. Keep tone encouraging and professional.
 
     Data: {json.dumps(payload)}
 
@@ -404,14 +546,14 @@ if st.button("Generate AI Analysis"):
     1) Provide a concise competitiveness assessment using professional vocabulary.
     2) Return exactly {12 if n_customers>=1000 else 8} concise customer-style comments tailored to the audience and location, each with a practical improvement.
     3) Provide top 2 strengths and top 2 weaknesses with integer percentages that sum to 100 for each list, plus an "Other" value.
-    4) Provide a star rating distribution (1–5 stars) for {n_customers} simulated reviews aligned to the analysis.
+    4) Provide a star rating distribution (1-5 stars) for {n_customers} simulated reviews aligned to the analysis.
 
     Return valid JSON only with this schema:
     {{
       "competitive_summary": "...",
       "comments": ["..."],
       "best_aspects": {{"aspect1": "...", "percentage1": 60, "aspect2": "...", "percentage2": 30, "other": 10}},
-      "worst_aspects": {{"aspect1": "...", "percentage1": 50, "percentage2": 35, "other": 15}},
+      "worst_aspects": {{"aspect1": "...", "percentage1": 50, "aspect2": "...", "percentage2": 35, "other": 15}},
       "star_ratings": {{"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}}
     }}
     """
@@ -459,21 +601,19 @@ if st.button("Generate AI Analysis"):
         # Detailed financials if Cost-plus
         if pricing_mode == "Cost-plus":
             metrics_rows = [
-                {"Metric": "COGS (materials)", "Value": round(materials_total, 2)},
+                {"Metric": "COGS materials", "Value": round(materials_total, 2)},
                 {"Metric": "Variable costs", "Value": round(variable_total, 2)},
                 {"Metric": "Production costs", "Value": round(production_total, 2)},
-                {"Metric": "— Packaging per unit", "Value": round(packaging_unit, 2)},
-                {"Metric": "— Equipment per unit", "Value": round(equipment_unit_total, 2)},
-                {"Metric": "Unit cost (total)", "Value": round(unit_cost, 2)},
+                {"Metric": "- Packaging per unit", "Value": round(packaging_unit, 2)},
+                {"Metric": "- Equipment per unit", "Value": round(equipment_unit_total, 2)},
+                {"Metric": "Unit cost total", "Value": round(unit_cost, 2)},
                 {"Metric": "Target margin (%)", "Value": int(margin_pct)},
                 {"Metric": "Suggested price", "Value": round(suggested_price, 2)},
                 {"Metric": "Gross profit per unit", "Value": round(unit_gross_profit, 2)},
             ]
-            metrics_df = pd.DataFrame(metrics_rows)
             st.markdown("### Detailed financials")
-            st.dataframe(metrics_df, use_container_width=True, hide_index=True)
-        else:
-            # Market-based summary table
+            st.dataframe(pd.DataFrame(metrics_rows), use_container_width=True, hide_index=True)
+        elif pricing_mode == "Market-based":
             mrows = [
                 {"Metric": "Min profitable price", "Value": round(mb_min_profitable, 2)},
                 {"Metric": "Competitive low", "Value": round(comp_low, 2)},
@@ -485,6 +625,20 @@ if st.button("Generate AI Analysis"):
             ]
             st.markdown("### Market summary")
             st.dataframe(pd.DataFrame(mrows), use_container_width=True, hide_index=True)
+        else:
+            vbrows = [
+                {"Metric": "Alt average cost", "Value": round(alt_avg, 2)},
+                {"Metric": "Time value per unit", "Value": round(time_value, 2)},
+                {"Metric": "Estimated value created", "Value": round(estimated_value, 2)},
+                {"Metric": "Min profitable price", "Value": round(vb_min_profitable, 2)},
+                {"Metric": "WTP typical", "Value": round(wtp_typical, 2)},
+                {"Metric": "WTP max", "Value": round(wtp_max, 2)},
+                {"Metric": "Recommended price", "Value": round(recommended_vb, 2)},
+                {"Metric": "Sweet spot low", "Value": round(sweet_low_vb, 2)},
+                {"Metric": "Sweet spot high", "Value": round(sweet_high_vb, 2)},
+            ]
+            st.markdown("### Value summary")
+            st.dataframe(pd.DataFrame(vbrows), use_container_width=True, hide_index=True)
 
         # Star ratings pie chart
         stars = data.get("star_ratings", {}) or {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
@@ -509,5 +663,4 @@ if st.button("Generate AI Analysis"):
         st.code(locals().get("raw", "<no raw output>"))
 
 st.markdown("---")
-st.caption("Built with Streamlit and OpenAI • Structured around cost-plus and market-based pricing paths.")
-
+st.caption("Built with Streamlit and OpenAI • Cost-plus, market-based, and value-based pricing paths.")
