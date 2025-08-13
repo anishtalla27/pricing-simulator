@@ -8,230 +8,214 @@ from openai import OpenAI
 # =====================
 # Setup
 # =====================
-st.set_page_config(page_title="Cost-Plus Pricing Lab", page_icon=":rocket:", layout="centered")
-client = OpenAI(api_key=st.secrets["openai"]["api_key"])  # Keep API key in Streamlit secrets
+st.set_page_config(page_title="Professional Cost-Plus Pricing Studio", page_icon=":briefcase:", layout="centered")
+client = OpenAI(api_key=st.secrets["openai"]["api_key"])  # Secrets-managed API key
 
 # Background style
 st.markdown(
     """
     <style>
-      .stApp { background: radial-gradient(circle at 50% 40%, #144e72 0%, #1e5f8d 55%, #e7f6ff 100%); min-height: 100vh; }
-      .small-note { color:#245a75; font-size:0.9rem; }
-      .edu { background:#f0fbff; border-left:5px solid #19a7ff; padding:0.6rem 0.8rem; border-radius:6px; }
+      .stApp { background: radial-gradient(circle at 50% 40%, #0e3d5a 0%, #175a80 55%, #e7f6ff 100%); min-height: 100vh; }
+      .note { background:#eef8ff; border-left:5px solid #0ea5e9; padding:0.6rem 0.8rem; border-radius:6px; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-st.markdown("""
-<div style='text-align:center; font-size:38px; font-weight:800; color:#13c0ff;'>
-  🚀 Cost-Plus Pricing Lab for Young Entrepreneurs
+st.markdown(
+    """
+<div style='text-align:center; font-size:34px; font-weight:800; color:#0ea5e9;'>
+  Professional Cost-Plus Pricing Studio
 </div>
-<div style='text-align:center; color:#0f2f44;'>Figure out a fair price, learn how costs work, and get friendly AI tips.</div>
-""", unsafe_allow_html=True)
+<div style='text-align:center; color:#0f2f44;'>A rigorous tool for calculating unit economics and stress-testing pricing decisions.</div>
+""",
+    unsafe_allow_html=True,
+)
 st.markdown("---")
 
 # =====================
-# Save / Load product profiles
+# Session state for dynamic inputs
 # =====================
-if "profiles" not in st.session_state:
-    st.session_state.profiles = {}
-
-cols = st.columns([2,2,1])
-with cols[0]:
-    profile_name = st.text_input("Save as profile name", placeholder="My Slime Kit v1")
-with cols[1]:
-    selected_profile = st.selectbox("Load profile", [""] + list(st.session_state.profiles.keys()))
-with cols[2]:
-    if st.button("💾 Save") and profile_name.strip():
-        st.session_state.profiles[profile_name.strip()] = st.session_state.get("_current_profile", {})
-        st.success(f"Saved profile '{profile_name.strip()}'")
-
-if selected_profile:
-    loaded = st.session_state.profiles.get(selected_profile, {})
-    if loaded:
-        st.session_state.update(loaded)
-        st.info(f"Loaded profile '{selected_profile}'")
+if "materials" not in st.session_state:
+    st.session_state.materials = [{"name": "Primary Material", "unit_cost": 2.00}]
+if "equipment" not in st.session_state:
+    st.session_state.equipment = [{"name": "Starter Tool", "cap_units": 200, "total_cost": 25.0}]
 
 # =====================
-# Product Basics
+# Product basics
 # =====================
-st.subheader("📝 Product Basics")
+st.subheader("Product Definition")
 colA, colB = st.columns(2)
 with colA:
-    product_name = st.text_input("Product name", value=st.session_state.get("product_name", ""), help="What are you selling?")
+    product_name = st.text_input("Product name", value=st.session_state.get("product_name", ""))
 with colB:
-    time_minutes = st.number_input("Time to make one product (minutes)", min_value=0, value=st.session_state.get("time_minutes", 15), help="How long it takes you to make one item.")
-product_desc = st.text_area("Short description", value=st.session_state.get("product_desc", ""), placeholder="A handmade bracelet with cute charms.")
+    cycle_minutes = st.number_input("Direct labor time per unit (minutes)", min_value=0, value=st.session_state.get("cycle_minutes", 15))
 
-st.markdown("<div class='edu'>Tip: Time is money. Your time counts as a cost called 'labor'.</div>", unsafe_allow_html=True)
+product_desc = st.text_area("Concise product description", value=st.session_state.get("product_desc", ""), placeholder="Handcrafted bracelet with premium charms.")
 
-# =====================
-# Materials
-# =====================
-st.subheader("🧱 Materials (per product)")
-colM1, colM2 = st.columns(2)
-with colM1:
-    materials_cost = st.number_input("Raw materials ($)", min_value=0.0, value=st.session_state.get("materials_cost", 2.00), help="Beads, wood, flour, etc.")
-with colM2:
-    packaging_cost = st.number_input("Packaging ($)", min_value=0.0, value=st.session_state.get("packaging_cost", 0.50), help="Bags, boxes, labels.")
+st.markdown("<div class='note'>Labor time converts to a per-unit labor cost using your target hourly compensation.</div>", unsafe_allow_html=True)
 
 # =====================
-# One-Time Equipment (CRITICAL)
-# =====================
-st.subheader("🛠️ One-Time Equipment")
-colE1, colE2 = st.columns(2)
-with colE1:
-    equip_name = st.text_input("Equipment name", value=st.session_state.get("equip_name", "Glue gun"), help="Tool or machine you bought once.")
-    equip_cost = st.number_input("Equipment total cost ($)", min_value=0.0, value=st.session_state.get("equip_cost", 25.0))
-with colE2:
-    equip_units = st.number_input("How many products can this make?", min_value=1, value=st.session_state.get("equip_units", 200), help="Best guess over the life of the equipment.")
-    equip_date = st.date_input("Purchase date", value=st.session_state.get("equip_date", date.today()))
-
-# Equipment cost per unit (amortized)
-if equip_units > 0:
-    equip_per_unit = equip_cost / equip_units
-else:
-    equip_per_unit = 0.0
-
-# =====================
-# Production Costs (CRITICAL)
-# =====================
-st.subheader("🏭 Production Costs")
-colP1, colP2 = st.columns(2)
-with colP1:
-    hourly_wage = st.number_input("Your desired hourly wage ($/hour)", min_value=0.0, value=st.session_state.get("hourly_wage", 12.0), help="Pay yourself fairly for your time.")
-    other_prod_cost = st.number_input("Other production cost per product ($)", min_value=0.0, value=st.session_state.get("other_prod_cost", 0.20), help="Electricity, water, etc.")
-with colP2:
-    shipping_cost = st.number_input("Shipping / delivery per product ($)", min_value=0.0, value=st.session_state.get("shipping_cost", 3.50))
-    platform_fee_pct = st.slider("Platform fee (% of price)", min_value=0, max_value=30, value=st.session_state.get("platform_fee_pct", 5), help="Fees from Etsy, eBay, etc.")
-    platform_fee_fixed = st.number_input("Platform fixed fee per sale ($)", min_value=0.0, value=st.session_state.get("platform_fee_fixed", 0.30))
-
-# Labor cost per unit
-labor_cost = (time_minutes / 60.0) * hourly_wage
-
-# =====================
-# Monthly Business Costs
-# =====================
-st.subheader("📅 Monthly Business Costs")
-colB1, colB2 = st.columns(2)
-with colB1:
-    monthly_expenses = st.number_input("Total monthly business expenses ($)", min_value=0.0, value=st.session_state.get("monthly_expenses", 30.0), help="Ads, extra supplies, website, etc.")
-with colB2:
-    avg_units_per_month = st.number_input("Average products sold per month", min_value=1, value=st.session_state.get("avg_units_per_month", 20))
-
-monthly_overhead_per_unit = monthly_expenses / avg_units_per_month if avg_units_per_month > 0 else 0.0
-
-# =====================
-# Additional Notes
-# =====================
-notes = st.text_area("Additional notes (optional)", value=st.session_state.get("notes", ""), help="Any special costs or things to remember.")
-
-# =====================
-# Cost-plus Calculation
+# Section 1: Cost of Goods Sold (COGS)
 # =====================
 st.markdown("---")
-st.subheader("🧮 Cost-Plus Calculator")
-margin_pct = st.slider("Choose your profit margin (%)", 10, 100, value=40, help="Higher margin means more profit per sale, but price goes up.")
+st.header("Cost of Goods Sold (COGS)")
 
-# Variable costs per unit (costs that happen every sale)
-variable_costs = (
-    materials_cost + packaging_cost + equip_per_unit + labor_cost + other_prod_cost + shipping_cost
-)
+# Dynamic Raw Materials
+st.markdown("### Raw materials per unit")
+add_mat, _ = st.columns([1,5])
+if add_mat.button("Add material"):
+    st.session_state.materials.append({"name": "", "unit_cost": 0.0})
 
-# Price-dependent fees
-# We will compute after we get pre-fee price guess. Start with base price guess:
-base_price_no_fees = variable_costs + monthly_overhead_per_unit
-prelim_price = base_price_no_fees * (1 + margin_pct/100)
-platform_fees_per_unit = (platform_fee_pct/100.0) * prelim_price + platform_fee_fixed
+mat_rows = []
+for i, item in enumerate(st.session_state.materials):
+    c1, c2 = st.columns([3,2])
+    name = c1.text_input(f"Material {i+1} name", value=item["name"], key=f"mat_name_{i}")
+    cost = c2.number_input(f"Material {i+1} cost per unit ($)", min_value=0.0, value=float(item["unit_cost"]), step=0.01, key=f"mat_cost_{i}")
+    st.session_state.materials[i] = {"name": name, "unit_cost": cost}
+    mat_rows.append({"Material": name or f"Material {i+1}", "$/unit": round(cost, 2)})
 
-true_unit_cost = variable_costs + monthly_overhead_per_unit + platform_fees_per_unit
-suggested_price = true_unit_cost * (1 + margin_pct/100)
-profit_per_unit = suggested_price - true_unit_cost
+materials_df = pd.DataFrame(mat_rows) if mat_rows else pd.DataFrame(columns=["Material", "$/unit"]) 
+materials_total = float(sum([m["unit_cost"] for m in st.session_state.materials]))
 
-# Break-even units per month (to cover monthly expenses only)
-contribution_per_unit = suggested_price - (variable_costs + platform_fees_per_unit)
-breakeven_units = int(monthly_expenses / contribution_per_unit) + (1 if monthly_expenses % max(contribution_per_unit, 1e-9) != 0 else 0) if contribution_per_unit > 0 else None
+st.markdown("### COGS subtotal")
+st.metric("Materials subtotal (per unit)", f"${materials_total:.2f}")
 
 # =====================
-# Show Results
+# Section 2: Variable Costs (selling and distribution per unit)
 # =====================
-st.success("Great job. Your pricing calculation is ready!")
-st.balloons()
+st.markdown("---")
+st.header("Variable Costs")
+
+colV1, colV2 = st.columns(2)
+with colV1:
+    shipping_unit = st.number_input("Outbound shipping or delivery per unit ($)", min_value=0.0, value=st.session_state.get("shipping_unit", 3.50), step=0.10)
+with colV2:
+    variable_selling = st.number_input("Other variable selling expense per unit ($)", min_value=0.0, value=st.session_state.get("variable_selling", 0.00), step=0.10, help="Samples, small discounts, event ticket per-unit allocation")
+
+variable_total = shipping_unit + variable_selling
+
+st.metric("Variable costs subtotal (per unit)", f"${variable_total:.2f}")
+
+# =====================
+# Section 3: Production Costs (conversion costs and capital amortization)
+# =====================
+st.markdown("---")
+st.header("Production Costs")
+
+colP1, colP2 = st.columns(2)
+with colP1:
+    hourly_wage = st.number_input("Target hourly compensation ($/hour)", min_value=0.0, value=st.session_state.get("hourly_wage", 12.0), step=0.50)
+    labor_unit = (cycle_minutes / 60.0) * hourly_wage
+with colP2:
+    packaging_unit = st.number_input("Packaging cost per unit ($)", min_value=0.0, value=st.session_state.get("packaging_unit", 0.50), step=0.05)
+
+other_conversion = st.number_input("Other conversion cost per unit ($)", min_value=0.0, value=st.session_state.get("other_conversion", 0.20), step=0.05, help="Electricity, consumables, cleaning")
+
+st.markdown("### Machinery and tools (amortized per unit)")
+add_eqp, _ = st.columns([1,5])
+if add_eqp.button("Add equipment"):
+    st.session_state.equipment.append({"name": "", "cap_units": 100, "total_cost": 0.0})
+
+eq_rows = []
+for j, eq in enumerate(st.session_state.equipment):
+    c1, c2, c3 = st.columns([3,2,2])
+    ename = c1.text_input(f"Equipment {j+1} name", value=eq["name"], key=f"eq_name_{j}")
+    cap = c2.number_input(f"Capacity units {j+1}", min_value=1, value=int(eq["cap_units"]), step=1, key=f"eq_cap_{j}")
+    tcost = c3.number_input(f"Total cost {j+1} ($)", min_value=0.0, value=float(eq["total_cost"]), step=1.0, key=f"eq_cost_{j}")
+    st.session_state.equipment[j] = {"name": ename, "cap_units": cap, "total_cost": tcost}
+    per_unit = (tcost / cap) if cap > 0 else 0.0
+    eq_rows.append({"Equipment": ename or f"Equipment {j+1}", "Per-unit amortization ($)": round(per_unit, 4)})
+
+equipment_df = pd.DataFrame(eq_rows) if eq_rows else pd.DataFrame(columns=["Equipment", "Per-unit amortization ($)"])
+equipment_unit_total = float(sum([(e["total_cost"] / e["cap_units"]) for e in st.session_state.equipment if e["cap_units"] > 0]))
+
+production_total = labor_unit + packaging_unit + other_conversion + equipment_unit_total
+
+st.markdown("### Production subtotal")
+colPS1, colPS2, colPS3, colPS4 = st.columns(4)
+colPS1.metric("Labor per unit", f"${labor_unit:.2f}")
+colPS2.metric("Packaging per unit", f"${packaging_unit:.2f}")
+colPS3.metric("Other conversion per unit", f"${other_conversion:.2f}")
+colPS4.metric("Equipment per unit", f"${equipment_unit_total:.2f}")
+
+# =====================
+# Pricing
+# =====================
+st.markdown("---")
+st.header("Pricing and Margin")
+
+margin_pct = st.slider("Target gross margin (%)", 5, 95, value=40, step=1)
+
+unit_cost = materials_total + variable_total + production_total
+suggested_price = unit_cost * (1 + margin_pct / 100)
+unit_gross_profit = suggested_price - unit_cost
 
 colR1, colR2 = st.columns(2)
 with colR1:
-    st.metric("Suggested Price", f"${suggested_price:.2f}")
-    st.metric("Profit per Unit", f"${profit_per_unit:.2f}")
+    st.metric("Comprehensive unit cost", f"${unit_cost:.2f}")
+    st.metric("Suggested price", f"${suggested_price:.2f}")
 with colR2:
-    st.metric("Your Margin", f"{margin_pct}%")
-    if breakeven_units is not None and breakeven_units > 0:
-        st.metric("Break-even units / month", f"{breakeven_units}")
-    else:
-        st.metric("Break-even units / month", "N/A")
+    st.metric("Target margin", f"{margin_pct}%")
+    st.metric("Gross profit per unit", f"${unit_gross_profit:.2f}")
 
-# Cost breakdown table
-breakdown = pd.DataFrame([
-    {"Cost Type":"Materials", "$/unit": round(materials_cost,2)},
-    {"Cost Type":"Packaging", "$/unit": round(packaging_cost,2)},
-    {"Cost Type":"Equipment (spread)", "$/unit": round(equip_per_unit,2)},
-    {"Cost Type":"Labor", "$/unit": round(labor_cost,2)},
-    {"Cost Type":"Other Production", "$/unit": round(other_prod_cost,2)},
-    {"Cost Type":"Shipping/Delivery", "$/unit": round(shipping_cost,2)},
-    {"Cost Type":"Platform Fees", "$/unit": round(platform_fees_per_unit,2)},
-    {"Cost Type":"Monthly Overhead", "$/unit": round(monthly_overhead_per_unit,2)},
-], columns=["Cost Type","$/unit"]) 
-
-st.markdown("### 📦 Where does the money go?")
-st.dataframe(breakdown, use_container_width=True, hide_index=True)
-
-fig = px.pie(breakdown, names="Cost Type", values="$/unit", title="Cost Breakdown per Unit")
+# =====================
+# Visuals
+# =====================
+st.markdown("### Cost composition")
+comp_df = pd.DataFrame([
+    {"Category": "COGS (materials)", "$/unit": round(materials_total, 2)},
+    {"Category": "Variable costs", "$/unit": round(variable_total, 2)},
+    {"Category": "Production costs", "$/unit": round(production_total, 2)},
+])
+fig = px.pie(comp_df, names="Category", values="$/unit", title="Unit cost breakdown")
 st.plotly_chart(fig, use_container_width=True)
 
+st.markdown("### Details")
+cols = st.columns(2)
+with cols[0]:
+    st.caption("Materials detail")
+    st.dataframe(materials_df, use_container_width=True, hide_index=True)
+with cols[1]:
+    st.caption("Equipment amortization detail")
+    st.dataframe(equipment_df, use_container_width=True, hide_index=True)
+
 # =====================
-# AI Feedback (competitiveness + advice)
+# AI analysis
 # =====================
 st.markdown("---")
-st.subheader("🤖 AI Feedback on Your Price")
+st.header("AI Commercial Analysis")
 
-n_customers = st.slider("How many customer opinions to simulate?", 100, 5000, 1000, step=100)
+n_customers = st.slider("Number of simulated customer opinions", 100, 5000, 1000, step=100)
 
-# Choose number of comments based on n_customers
-def comment_count(n):
-    if n <= 100:
-        return 8
-    elif n <= 1000:
-        return 10
-    elif n <= 2500:
-        return 12
-    else:
-        return 15
+if st.button("Generate AI Analysis"):
+    payload = {
+        "product_name": product_name,
+        "product_description": product_desc,
+        "labor_minutes_per_unit": cycle_minutes,
+        "hourly_compensation": hourly_wage,
+        "materials": st.session_state.materials,
+        "equipment": st.session_state.equipment,
+        "packaging_per_unit": packaging_unit,
+        "other_conversion_per_unit": other_conversion,
+        "shipping_per_unit": shipping_unit,
+        "other_variable_per_unit": variable_selling,
+        "unit_cost": unit_cost,
+        "target_margin_pct": margin_pct,
+        "suggested_price": suggested_price,
+        "gross_profit_per_unit": unit_gross_profit,
+        "n_customers": n_customers,
+    }
 
-n_comments = comment_count(n_customers)
-
-if st.button("Generate AI Feedback"):
     prompt = f"""
-    You are helping a 10-17 year old entrepreneur think about pricing.
-    Product: {product_name}
-    Description: {product_desc}
-    Time per unit (minutes): {time_minutes}
-    Calculated suggested price: ${suggested_price:.2f}
-    Profit per unit at this price: ${profit_per_unit:.2f}
-    Margin percent: {margin_pct}%
+    Act as a pricing and go-to-market advisor. Evaluate the following unit economics and propose actions to improve profitability without destroying demand.
 
-    Unit cost breakdown (all values are $/unit):
-    - Materials: {materials_cost:.2f}
-    - Packaging: {packaging_cost:.2f}
-    - Equipment (spread over {equip_units} units): {equip_per_unit:.2f}
-    - Labor: {labor_cost:.2f}
-    - Other production: {other_prod_cost:.2f}
-    - Shipping: {shipping_cost:.2f}
-    - Platform fees: {platform_fees_per_unit:.2f}
-    - Monthly overhead per unit: {monthly_overhead_per_unit:.2f}
+    Data: {json.dumps(payload)}
 
-    Task 1: In one short paragraph, say whether this price looks competitive in a simple, friendly way.
-    Task 2: Give {n_comments} short customer-style comments (kid-friendly) with mostly helpful improvement ideas they can actually do. Include a couple encouraging messages.
-    Task 3: List the top 2 BEST aspects and top 2 WORST aspects with an estimated percentage of customers who chose each. Also include an 'Other' catch-all percent for each list. All percentages must be integers 0-100 and each list should sum to 100.
+    Tasks:
+    1) Provide a concise competitiveness assessment in professional vocabulary.
+    2) Return exactly {12 if n_customers>=1000 else 8} crisp customer-style comments that include practical improvements.
+    3) Provide top 2 strengths and top 2 weaknesses with integer percentages that sum to 100 for each list, plus an "Other" value.
 
     Return valid JSON only with this schema:
     {{
@@ -241,6 +225,7 @@ if st.button("Generate AI Feedback"):
       "worst_aspects": {{"aspect1": "...", "percentage1": 50, "aspect2": "...", "percentage2": 35, "other": 15}}
     }}
     """
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -250,10 +235,9 @@ if st.button("Generate AI Feedback"):
         raw = resp.choices[0].message.content.strip().strip("```json").strip("```").strip()
         data = json.loads(raw)
 
-        st.markdown("### 📣 Competitive Summary")
+        st.markdown("### Executive view")
         st.info(data.get("competitive_summary", ""))
 
-        # Best/Worst aspects tables (2 aspects + Other)
         best = data.get("best_aspects", {})
         worst = data.get("worst_aspects", {})
 
@@ -262,64 +246,29 @@ if st.button("Generate AI Feedback"):
             {"Aspect": best.get("aspect2", "N/A"), "Percent of customers (%)": best.get("percentage2", "N/A")},
             {"Aspect": "Other", "Percent of customers (%)": best.get("other", "N/A")},
         ])
-        best_table["Percent of customers (%)"] = best_table["Percent of customers (%)"].astype(str)
-
         worst_table = pd.DataFrame([
             {"Aspect": worst.get("aspect1", "N/A"), "Percent of customers (%)": worst.get("percentage1", "N/A")},
             {"Aspect": worst.get("aspect2", "N/A"), "Percent of customers (%)": worst.get("percentage2", "N/A")},
             {"Aspect": "Other", "Percent of customers (%)": worst.get("other", "N/A")},
         ])
-        worst_table["Percent of customers (%)"] = worst_table["Percent of customers (%)"].astype(str)
 
-        st.markdown("### 🏅 Best reasons people like your product")
+        st.markdown("### Strengths")
         st.dataframe(best_table, use_container_width=True, hide_index=True)
-        st.caption("Percent of customers (%) means how many people picked that reason as their favorite part.")
-
-        st.markdown("### 🚧 Top things to improve")
+        st.markdown("### Weaknesses")
         st.dataframe(worst_table, use_container_width=True, hide_index=True)
-        st.caption("Percent of customers (%) means how many people picked that reason as the biggest thing to fix.")
 
-        # Comments
         comments = data.get("comments", [])
-        st.markdown("### 💬 Customer-style comments")
+        st.markdown("### Customer commentary")
         if comments:
             for c in comments:
                 st.info(f"🗣️ {c}")
         else:
             st.write("No comments available.")
 
-    except Exception as e:
-        st.error("AI response could not be parsed. Here's what we got:")
+    except Exception:
+        st.error("AI response could not be parsed. Here is the raw output:")
         st.code(locals().get("raw", "<no raw output>"))
 
-# =====================
-# Persist current profile in session
-# =====================
-st.session_state._current_profile = dict(
-    product_name=product_name,
-    product_desc=product_desc,
-    time_minutes=time_minutes,
-    materials_cost=materials_cost,
-    packaging_cost=packaging_cost,
-    equip_name=equip_name,
-    equip_cost=equip_cost,
-    equip_units=equip_units,
-    equip_date=str(equip_date),
-    hourly_wage=hourly_wage,
-    other_prod_cost=other_prod_cost,
-    shipping_cost=shipping_cost,
-    platform_fee_pct=platform_fee_pct,
-    platform_fee_fixed=platform_fee_fixed,
-    monthly_expenses=monthly_expenses,
-    avg_units_per_month=avg_units_per_month,
-    notes=notes,
-    margin_pct=margin_pct,
-)
-
-# Download profile as JSON
-profile_json = json.dumps(st.session_state._current_profile, indent=2)
-st.download_button("⬇️ Download profile JSON", data=profile_json, file_name=f"{product_name or 'product'}.json", mime="application/json")
-
 st.markdown("---")
-st.caption("Made with Streamlit + OpenAI • Learn by doing • You got this! ✨")
+st.caption("Built with Streamlit and OpenAI • Focus on fundamentals: COGS, variable costs, production costs.")
 
