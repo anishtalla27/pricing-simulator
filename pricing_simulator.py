@@ -88,7 +88,40 @@ with loc2:
 # =====================
 st.markdown("---")
 st.subheader("Choose pricing approach")
-pricing_mode = st.selectbox("Pricing method", ["Cost-plus", "Market-based"], index=0)
+
+# Quick, kid-friendly overview
+st.markdown(
+    """
+    <div class='note'>
+      <b>Cost-plus pricing:</b> Start from your costs, then add a target margin to set a price. Best when you know your costs clearly and want a simple, reliable price.<br>
+      <b>Market-based pricing:</b> Look at competitor prices and what buyers are willing to pay, then pick a price that fits your product’s position.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+pricing_mode = st.selectbox(
+    "Pricing method",
+    ["Cost-plus", "Market-based"],
+    index=0,
+    help="Cost-plus: price from costs and a margin. Market-based: price from competitor prices and buyer willingness to pay."
+)
+
+# Optional: deeper guidance (expanded by default for clarity)
+with st.expander("What is Cost-plus pricing?", expanded=True):
+    st.write(
+        "- Add up COGS, variable, and production costs per unit.\n"
+        "- Choose a target margin (for example 40 percent).\n"
+        "- Price = Unit cost × (1 + margin). Simple and stable."
+    )
+
+with st.expander("What is Market-based pricing?", expanded=True):
+    st.write(
+        "- Collect competitor prices and note differences.\n"
+        "- Think about who will buy and how much they usually spend.\n"
+        "- Choose a price that fits your quality level and still beats your minimum profitable price."
+    )
+
 
 # =====================
 # COST-PLUS FLOW
@@ -233,11 +266,14 @@ else:
         cname = c1.text_input(f"Competitor {i+1} name", value=comp.get("name", ""), key=f"comp_name_{i}")
         cprice = c2.number_input(f"Competitor {i+1} price ($)", min_value=0.0, value=float(comp.get("price", 0.0)), step=0.10, key=f"comp_price_{i}")
         cdiff = st.text_area(
-            f"Differences vs your product — strengths and weaknesses for Competitor {i+1}",
-            value=comp.get("differences", comp.get("source", "")),
-            help="What is different about their product vs yours? Materials, quality, features, size, packaging, reputation, shipping time, warranty, etc.",
+            f"Compare to your product: strengths and weaknesses for Competitor {i+1}",
+            value=comp.get("differences", ""),
+            help="Explain how this competitor differs from your product: materials, quality, features, size, packaging, brand reputation, shipping speed, warranty, and anything else that stands out.",
+            placeholder="Example: Uses plastic clasp (we use metal); ships in 7 days (we deliver same day at school); slightly lower quality beads; stronger brand on social media.",
             key=f"comp_diff_{i}"
         )
+
+
         st.session_state.competitors[i] = {"name": cname, "price": cprice, "differences": cdiff}
         comp_rows.append({"Name": cname or f"Competitor {i+1}", "Price": round(cprice, 2), "Differences": cdiff})
     competitors_df = pd.DataFrame(comp_rows)
